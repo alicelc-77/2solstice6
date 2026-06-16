@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Golatico 2026 — Timetable</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --toolbar-h: 54px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: #0d0d0d;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--toolbar-h);
+      background: rgba(10,10,10,0.96);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 10px;
+      z-index: 200;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #toolbar::-webkit-scrollbar { display: none; }
+
+    .tb-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-right: 1px;
+    }
+
+    .person-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: transform .12s, border-color .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .person-btn.active { border-color: white; transform: scale(1.18); }
+
+    .sep {
+      width: 1px; height: 24px;
+      background: rgba(255,255,255,0.1);
+      flex-shrink: 0; margin: 0 3px;
+    }
+
+    .tool-btn {
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 15px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background .1s, color .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tool-btn.active {
+      background: rgba(255,255,255,0.14);
+      color: white;
+      border-color: rgba(255,255,255,0.28);
+    }
+
+    .icon-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: transparent;
+      cursor: pointer;
+      color: rgba(255,255,255,0.45);
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .icon-btn:active { background: rgba(255,255,255,0.1); }
+
+    #pen-size-wrap {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    #pen-size { width: 66px; accent-color: white; }
+
+    /* ── Sync indicator ── */
+    #sync-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #30d158;
+      flex-shrink: 0;
+      transition: background .4s;
+    }
+    #sync-dot.syncing { background: #ff9f0a; }
+    #sync-dot.error   { background: #ff453a; }
+    #sync-dot.offline { background: #636366; }
+
+    /* ── Workspace ── */
+    #workspace-wrap {
+      position: fixed;
+      top: var(--toolbar-h);
+      left: 0; right: 0; bottom: 0;
+      overflow: scroll;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #workspace {
+      position: relative;
+      display: inline-block;
+      min-width: 100%;
+    }
+
+    #timetable-img {
+      display: block;
+      /* Fill viewport height; image is wide — scroll horizontally */
+      height: calc(100dvh - var(--toolbar-h));
+      width: auto;
+      max-width: none;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    #draw-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #stamps-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* ── Stamps ── */
+    .stamp-el {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: all;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      line-height: 1;
+      cursor: grab;
+    }
+    .stamp-el:active { cursor: grabbing; }
+    .stamp-el.selected::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed white; pointer-events: none; }
+
+    .like-stamp {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+      border: 2px solid rgba(255,255,255,0.9);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+    }
+
+    .love-stamp {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px;
+      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.6));
+    }
+    .love-stamp-emoji { font-size: 34px; line-height: 1; }
+    .love-letter {
+      position: absolute;
+      font-size: 11px; font-weight: 700;
+      text-shadow: 0 0 5px rgba(0,0,0,1), 0 1px 3px rgba(0,0,0,0.9);
+      line-height: 1;
+    }
+
+    /* ── Context menu ── */
+    #ctx-menu {
+      position: fixed;
+      background: rgba(28,28,30,0.98);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      padding: 5px;
+      z-index: 500;
+      display: none;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.65);
+      min-width: 160px;
+    }
+    #ctx-menu button {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%;
+      padding: 9px 14px;
+      background: transparent; border: none;
+      color: #ff453a;
+      font-size: 14px; font-family: var(--font);
+      cursor: pointer;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    #ctx-menu button:hover { background: rgba(255,255,255,0.06); }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: env(safe-area-inset-bottom, 16px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.72);
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      padding: 7px 16px;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 300;
+      opacity: 0;
+      transition: opacity .25s;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div id="sync-dot" title="Sync status"></div>
+  <div class="sep"></div>
+
+  <span class="tb-label">who</span>
+  <button class="person-btn active" id="btn-N" style="background:#7B2FBE;color:white"   onclick="selectPerson('N')">N</button>
+  <button class="person-btn"        id="btn-A" style="background:#D4378C;color:white"   onclick="selectPerson('A')">A</button>
+  <button class="person-btn"        id="btn-L" style="background:#F5C400;color:#3a2800" onclick="selectPerson('L')">L</button>
+  <button class="person-btn"        id="btn-I" style="background:#2196F3;color:white"   onclick="selectPerson('I')">I</button>
+
+  <div class="sep"></div>
+
+  <span class="tb-label">tool</span>
+  <button class="tool-btn active" id="tool-like" onclick="selectTool('like')">● like</button>
+  <button class="tool-btn"        id="tool-love" onclick="selectTool('love')">♥ love</button>
+  <button class="tool-btn"        id="tool-pen"  onclick="selectTool('pen')">✏ pen</button>
+
+  <div id="pen-size-wrap">
+    <span style="font-size:11px;color:rgba(255,255,255,0.3)">size</span>
+    <input type="range" id="pen-size" min="1" max="10" value="3" step="1">
+  </div>
+
+  <div class="sep"></div>
+  <button class="icon-btn" onclick="undo()" title="Undo last action">↩</button>
+</div>
+
+<div id="workspace-wrap">
+  <div id="workspace">
+    <!--
+      ════════════════════════════════════════════════════
+      PUT YOUR TIMETABLE IMAGE IN THE SAME FOLDER AS THIS
+      FILE AND NAME IT timetable.jpg  (or change src below)
+      ════════════════════════════════════════════════════
+    -->
+    <img id="timetable-img" src="./timetable.jpg" alt="Golatico 2026 timetable" draggable="false">
+    <canvas id="draw-canvas"></canvas>
+    <div id="stamps-layer"></div>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <button onclick="deleteContextStamp()">🗑 Remove stamp</button>
+</div>
+
+<div id="toast"></div>
+
+<!--
+  ══════════════════════════════════════════════════════════
+  FIREBASE SETUP — do this once:
+
+  1. Go to console.firebase.google.com
+  2. Create a project (any name, e.g. "golatico")
+  3. Add a Web app (</> icon) — copy the firebaseConfig object
+  4. Go to Build → Realtime Database → Create database
+     Choose "Start in test mode" (good for ~30 days, fine for a festival)
+  5. Paste your config values into the object below
+  ══════════════════════════════════════════════════════════
+-->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────
+const firebaseConfig = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+// ─────────────────────────────────────────────────────────
+
+const PERSONS = {
+  N: { color: '#7B2FBE', textColor: 'white',   emoji: '😛', letterColor: 'white'   },
+  A: { color: '#D4378C', textColor: 'white',   emoji: '⭐', letterColor: 'white'   },
+  L: { color: '#F5C400', textColor: '#3a2800', emoji: '🔥', letterColor: 'white'   },
+  I: { color: '#2196F3', textColor: 'white',   emoji: '🍞', letterColor: '#3a2800' },
+};
+
+// ── State ─────────────────────────────────────────────────
+let currentPerson = 'N';
+let currentTool   = 'like';
+let strokes       = [];       // local pen strokes (not persisted)
+let localHistory  = [];       // undo stack for THIS session
+let isDrawing     = false;
+let currentStroke = null;
+let lastPos       = null;
+let draggingStamp = null;
+let dragOffX = 0, dragOffY = 0;
+let isDragging    = false;
+let dragMoved     = false;
+let contextStampId = null;
+let selectedStampId = null;
+let longPressTimer = null;
+let stampsRef;
+
+// ── Elements ──────────────────────────────────────────────
+const canvas      = document.getElementById('draw-canvas');
+const ctx         = canvas.getContext('2d');
+const workspace   = document.getElementById('workspace');
+const stampsLayer = document.getElementById('stamps-layer');
+const syncDot     = document.getElementById('sync-dot');
+const img         = document.getElementById('timetable-img');
+
+// ── Firebase init ─────────────────────────────────────────
+try {
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  stampsRef = db.ref('golatico/stamps');
+
+  stampsRef.on('child_added', snap => {
+    const data = snap.val();
+    if (!stampsLayer.querySelector(`[data-id="${snap.key}"]`)) {
+      renderStampEl({ ...data, id: snap.key });
+    }
+  });
+
+  stampsRef.on('child_changed', snap => {
+    const data = snap.val();
+    const el = stampsLayer.querySelector(`[data-id="${snap.key}"]`);
+    if (el) { el.style.left = data.px + '%'; el.style.top = data.py + '%'; }
+  });
+
+  stampsRef.on('child_removed', snap => {
+    stampsLayer.querySelector(`[data-id="${snap.key}"]`)?.remove();
+  });
+
+  db.ref('.info/connected').on('value', snap => {
+    syncDot.className = snap.val() ? '' : 'offline';
+  });
+
+} catch(e) {
+  syncDot.className = 'error';
+  toast('Firebase not configured — stamps won\'t save across devices');
+  console.warn('Firebase:', e);
+}
+
+// ── Canvas resize ─────────────────────────────────────────
+// Draw in CSS-pixel space × devicePixelRatio so strokes are crisp on retina.
+img.addEventListener('load', resizeCanvas);
+if (img.complete) resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function resizeCanvas() {
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = img.getBoundingClientRect();
+  if (!rect.width) return;
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw coords = CSS pixels
+  redrawCanvas();
+}
+
+// ── Person / tool selection ───────────────────────────────
+function selectPerson(p) {
+  currentPerson = p;
+  document.querySelectorAll('.person-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + p).classList.add('active');
+}
+
+function selectTool(t) {
+  currentTool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + t).classList.add('active');
+  document.getElementById('pen-size-wrap').style.display = t === 'pen' ? 'flex' : 'none';
+  canvas.style.pointerEvents = t === 'pen' ? 'all' : 'none';
+}
+
+// ── Stamp placement ───────────────────────────────────────
+function getWorkspacePct(clientX, clientY) {
+  const rect = workspace.getBoundingClientRect();
+  return {
+    px: Math.max(0, Math.min(100, (clientX - rect.left) / rect.width  * 100)),
+    py: Math.max(0, Math.min(100, (clientY - rect.top)  / rect.height * 100)),
+  };
+}
+
+function placeStamp(clientX, clientY) {
+  const { px, py } = getWorkspacePct(clientX, clientY);
+  const data = { person: currentPerson, type: currentTool, px, py };
+
+  if (stampsRef) {
+    syncDot.className = 'syncing';
+    const ref = stampsRef.push(data);
+    localHistory.push({ type: 'stamp', id: ref.key });
+    ref.then(() => { syncDot.className = ''; }).catch(() => { syncDot.className = 'error'; });
+  } else {
+    // Offline fallback — local only
+    const stamp = { ...data, id: 'local_' + Date.now() };
+    renderStampEl(stamp);
+    localHistory.push({ type: 'stamp', id: stamp.id, local: true, el: stampsLayer.lastElementChild });
+  }
+}
+
+function renderStampEl(stamp) {
+  const p = PERSONS[stamp.person];
+  const el = document.createElement('div');
+  el.className  = 'stamp-el';
+  el.dataset.id = stamp.id;
+  el.style.left = stamp.px + '%';
+  el.style.top  = stamp.py + '%';
+
+  if (stamp.type === 'like') {
+    el.innerHTML = `<div class="like-stamp" style="background:${p.color};color:${p.textColor}">${stamp.person}</div>`;
+  } else {
+    el.innerHTML = `<div class="love-stamp">
+      <span class="love-stamp-emoji">${p.emoji}</span>
+      <span class="love-letter" style="color:${p.letterColor}">${stamp.person}</span>
+    </div>`;
+  }
+
+  el.addEventListener('click', e => { e.stopPropagation(); selectStamp(stamp.id); });
+  el.addEventListener('mousedown',   startDragStamp);
+  el.addEventListener('touchstart',  startDragStamp,  { passive: false });
+  el.addEventListener('contextmenu', showCtxMenuFromEvent);
+  el.addEventListener('touchstart',  startLongPress,  { passive: true });
+  el.addEventListener('touchend',    cancelLongPress);
+  el.addEventListener('touchmove',   cancelLongPress, { passive: true });
+  stampsLayer.appendChild(el);
+}
+
+// ── Stamp dragging ────────────────────────────────────────
+function startDragStamp(e) {
+  e.stopPropagation();
+  if (e.cancelable) e.preventDefault();
+  cancelLongPress();
+  isDragging = false;
+  dragMoved  = false;
+  draggingStamp = e.currentTarget;
+  const rect = workspace.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  dragOffX = cx - (parseFloat(draggingStamp.style.left) / 100 * rect.width  + rect.left);
+  dragOffY = cy - (parseFloat(draggingStamp.style.top)  / 100 * rect.height + rect.top);
+  document.addEventListener('mousemove', moveDragStamp);
+  document.addEventListener('mouseup',   stopDragStamp);
+  document.addEventListener('touchmove', moveDragStamp, { passive: false });
+  document.addEventListener('touchend',  stopDragStamp);
+}
+
+function moveDragStamp(e) {
+  if (!draggingStamp) return;
+  if (e.cancelable) e.preventDefault();
+  isDragging = true;
+  dragMoved  = true;
+  cancelLongPress();
+  const rect = workspace.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  const px = Math.max(0, Math.min(100, (cx - dragOffX - rect.left) / rect.width  * 100));
+  const py = Math.max(0, Math.min(100, (cy - dragOffY - rect.top)  / rect.height * 100));
+  draggingStamp.style.left = px + '%';
+  draggingStamp.style.top  = py + '%';
+}
+
+function stopDragStamp() {
+  if (draggingStamp && dragMoved && stampsRef) {
+    const id = draggingStamp.dataset.id;
+    const px = parseFloat(draggingStamp.style.left);
+    const py = parseFloat(draggingStamp.style.top);
+    syncDot.className = 'syncing';
+    stampsRef.child(id).update({ px, py })
+      .then(() => { syncDot.className = ''; })
+      .catch(() => { syncDot.className = 'error'; });
+  }
+  draggingStamp = null;
+  // Brief delay so click handler can check isDragging
+  setTimeout(() => { isDragging = false; dragMoved = false; }, 80);
+  document.removeEventListener('mousemove', moveDragStamp);
+  document.removeEventListener('mouseup',   stopDragStamp);
+  document.removeEventListener('touchmove', moveDragStamp);
+  document.removeEventListener('touchend',  stopDragStamp);
+}
+
+// ── Stamp selection ───────────────────────────────────────
+function selectStamp(id) {
+  document.querySelectorAll('.stamp-el.selected').forEach(el => el.classList.remove('selected'));
+  selectedStampId = id;
+  contextStampId  = id;
+  stampsLayer.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
+}
+
+function deselectStamp() {
+  document.querySelectorAll('.stamp-el.selected').forEach(el => el.classList.remove('selected'));
+  selectedStampId = null;
+}
+
+// ── Context menu / long-press delete ─────────────────────
+const ctxMenu = document.getElementById('ctx-menu');
+
+function showCtxMenuFromEvent(e) {
+  e.preventDefault();
+  contextStampId = e.currentTarget.dataset.id;
+  const x = Math.min(e.clientX, window.innerWidth  - 180);
+  const y = Math.min(e.clientY, window.innerHeight - 60);
+  ctxMenu.style.left    = x + 'px';
+  ctxMenu.style.top     = y + 'px';
+  ctxMenu.style.display = 'block';
+}
+
+function deleteContextStamp() {
+  if (!contextStampId) return;
+  ctxMenu.style.display = 'none';
+  if (stampsRef && !contextStampId.startsWith('local_')) {
+    syncDot.className = 'syncing';
+    stampsRef.child(contextStampId).remove().then(() => { syncDot.className = ''; });
+  } else {
+    stampsLayer.querySelector(`[data-id="${contextStampId}"]`)?.remove();
+  }
+  contextStampId = null;
+}
+
+document.addEventListener('click',      () => { ctxMenu.style.display = 'none'; });
+document.addEventListener('touchstart', () => { ctxMenu.style.display = 'none'; }, { passive: true });
+
+function startLongPress(e) {
+  longPressTimer = setTimeout(() => {
+    contextStampId = e.currentTarget.dataset.id;
+    const t = e.touches[0];
+    const x = Math.min(t.clientX, window.innerWidth  - 180);
+    const y = Math.min(t.clientY, window.innerHeight - 60);
+    ctxMenu.style.left    = x + 'px';
+    ctxMenu.style.top     = y + 'px';
+    ctxMenu.style.display = 'block';
+  }, 600);
+}
+function cancelLongPress() {
+  clearTimeout(longPressTimer);
+  longPressTimer = null;
+}
+
+// ── Workspace tap → place stamp ───────────────────────────
+workspace.addEventListener('click', e => {
+  if (currentTool === 'pen') return;
+  if (isDragging || dragMoved) return;
+  if (e.target.closest('.stamp-el')) return;
+  deselectStamp();
+  placeStamp(e.clientX, e.clientY);
+});
+
+workspace.addEventListener('touchend', e => {
+  if (currentTool === 'pen') return;
+  if (isDragging || dragMoved) return;
+  if (e.target.closest('.stamp-el')) return;
+  if (e.changedTouches.length === 1) {
+    placeStamp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  }
+}, { passive: true });
+
+// ── Pen drawing (local only, not persisted) ───────────────
+function getCanvasPos(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top,
+  };
+}
+
+canvas.addEventListener('mousedown',  startDraw);
+canvas.addEventListener('mousemove',  continueDraw);
+canvas.addEventListener('mouseup',    stopDraw);
+canvas.addEventListener('mouseleave', stopDraw);
+canvas.addEventListener('touchstart', startDraw,    { passive: false });
+canvas.addEventListener('touchmove',  continueDraw, { passive: false });
+canvas.addEventListener('touchend',   stopDraw);
+
+function startDraw(e) {
+  if (currentTool !== 'pen') return;
+  if (e.cancelable) e.preventDefault();
+  isDrawing = true;
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  const pos = getCanvasPos(cx, cy);
+  lastPos = pos;
+  const w = parseInt(document.getElementById('pen-size').value) * 2;
+  currentStroke = { color: PERSONS[currentPerson].color, width: w, points: [pos] };
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, w / 2, 0, Math.PI * 2);
+  ctx.fillStyle = currentStroke.color;
+  ctx.fill();
+}
+
+function continueDraw(e) {
+  if (!isDrawing) return;
+  if (e.cancelable) e.preventDefault();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  const pos = getCanvasPos(cx, cy);
+  ctx.beginPath();
+  ctx.moveTo(lastPos.x, lastPos.y);
+  ctx.lineTo(pos.x, pos.y);
+  ctx.strokeStyle = currentStroke.color;
+  ctx.lineWidth   = currentStroke.width;
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.stroke();
+  lastPos = pos;
+  currentStroke.points.push(pos);
+}
+
+function stopDraw() {
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (currentStroke?.points.length > 0) {
+    strokes.push(currentStroke);
+    localHistory.push({ type: 'stroke', idx: strokes.length - 1 });
+  }
+  currentStroke = null;
+  lastPos = null;
+}
+
+function redrawCanvas() {
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = img.getBoundingClientRect();
+  // Clear in CSS-pixel space (transform already applied)
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  for (const s of strokes) {
+    if (!s?.points.length) continue;
+    ctx.strokeStyle = ctx.fillStyle = s.color;
+    ctx.lineWidth = s.width;
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.arc(s.points[0].x, s.points[0].y, s.width / 2, 0, Math.PI * 2);
+    ctx.fill();
+    if (s.points.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(s.points[0].x, s.points[0].y);
+      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+      ctx.stroke();
+    }
+  }
+}
+
+
+// ── Clipboard (stamp copy/paste) ──────────────────────────
+let clipboardStamp = null; // { person, type }
+
+function copyStamp(id) {
+  const el = stampsLayer.querySelector(`[data-id="${id}"]`);
+  if (!el) return;
+  // Infer person/type from CSS classes on children
+  const isLike = !!el.querySelector('.like-stamp');
+  const person = (el.querySelector('.like-stamp') || el.querySelector('.love-letter'))?.textContent?.trim();
+  if (person) {
+    clipboardStamp = { person, type: isLike ? 'like' : 'love' };
+    toast(`Copied ${person}'s ${clipboardStamp.type} stamp`);
+  }
+}
+
+function pasteStamp() {
+  if (!clipboardStamp) return;
+  const prev = currentPerson;
+  const prevTool = currentTool;
+  currentPerson = clipboardStamp.person;
+  currentTool   = clipboardStamp.type;
+  // Paste near centre of current viewport
+  const wrap = document.getElementById('workspace-wrap');
+  const wRect = workspace.getBoundingClientRect();
+  const vCx = wrap.scrollLeft + wrap.clientWidth  / 2;
+  const vCy = wrap.scrollTop  + wrap.clientHeight / 2;
+  // Add small random jitter so repeated pastes don't stack exactly
+  const jx = (Math.random() - 0.5) * 40;
+  const jy = (Math.random() - 0.5) * 40;
+  const px = Math.max(0, Math.min(100, (vCx + jx) / workspace.offsetWidth  * 100));
+  const py = Math.max(0, Math.min(100, (vCy + jy) / workspace.offsetHeight * 100));
+  const data = { person: currentPerson, type: currentTool, px, py };
+  if (stampsRef) {
+    syncDot.className = 'syncing';
+    const ref = stampsRef.push(data);
+    localHistory.push({ type: 'stamp', id: ref.key });
+    ref.then(() => { syncDot.className = ''; });
+  } else {
+    const stamp = { ...data, id: 'local_' + Date.now() };
+    renderStampEl(stamp);
+    localHistory.push({ type: 'stamp', id: stamp.id });
+  }
+  currentPerson = prev;
+  currentTool   = prevTool;
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedStampId && document.activeElement === document.body) {
+      e.preventDefault();
+      contextStampId = selectedStampId;
+      selectedStampId = null;
+      deleteContextStamp();
+    }
+    return;
+  }
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+  switch (e.key.toLowerCase()) {
+    case 'z':
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+      break;
+    case 'y':
+      e.preventDefault();
+      redo();
+      break;
+    case 'c':
+      if (contextStampId) { e.preventDefault(); copyStamp(contextStampId); }
+      break;
+    case 'v':
+      if (clipboardStamp) { e.preventDefault(); pasteStamp(); }
+      break;
+  }
+});
+
+// ── Redo ───────────────────────────────────────────────────
+let redoStack = [];
+
+function undo() {
+  const last = localHistory.pop();
+  if (!last) return;
+  redoStack.push(last);
+  if (last.type === 'stroke') {
+    strokes.splice(last.idx, 1);
+    redrawCanvas();
+  } else if (last.type === 'stamp') {
+    if (stampsRef && !last.id.startsWith('local_')) {
+      syncDot.className = 'syncing';
+      stampsRef.child(last.id).remove().then(() => { syncDot.className = ''; });
+    } else {
+      stampsLayer.querySelector(`[data-id="${last.id}"]`)?.remove();
+    }
+  }
+}
+
+function redo() {
+  const last = redoStack.pop();
+  if (!last) return;
+  localHistory.push(last);
+  if (last.type === 'stroke') {
+    strokes.splice(last.idx, 0, last.stroke);
+    redrawCanvas();
+  } else if (last.type === 'stamp') {
+    if (stampsRef && !last.id.startsWith('local_')) {
+      // Re-push with same key isn't straightforward; just re-place
+      toast('Redo stamp: place it again manually');
+    }
+  }
+}
+
+// Also expose copyStamp via context menu
+document.getElementById('ctx-menu').insertAdjacentHTML('beforeend',
+  '<button onclick="copyStamp(contextStampId); ctxMenu.style.display=\'none\'">⎘ Copy stamp (Ctrl+C)</button>'
+);
+
+// ── Toast ─────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+</script>
+</body>
+</html>
