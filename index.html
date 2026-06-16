@@ -21,6 +21,7 @@
     /* ── Toolbar ── */
     #toolbar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      -webkit-transform: translate3d(0,0,0); transform: translate3d(0,0,0);
       height: calc(var(--tb) + env(safe-area-inset-top, 0px));
       padding-top: env(safe-area-inset-top, 0px);
       padding-left: 10px; padding-right: 10px;
@@ -288,7 +289,7 @@ const FB_CONFIG = {
   appId: '1:689871566233:web:26a49441f60069d46d4f08',
 };
 const PERSONS = {
-  N: { color: '#7B2FBE', text: 'white',   emoji: '😛' },
+  N: { color: '#7B2FBE', text: 'white',   emoji: '👅' },
   A: { color: '#D4378C', text: 'white',   emoji: '⭐' },
   L: { color: '#F5C400', text: '#3a2800', emoji: '🔥' },
   I: { color: '#2196F3', text: 'white',   emoji: '🍞' },
@@ -496,10 +497,11 @@ function deselect() {
 }
 
 function removeStamp(id) {
+  // Remove from DOM immediately (optimistic)
+  document.querySelector(`[data-id="${id}"]`)?.remove();
+  // Then sync to Firebase so it's gone for everyone
   if (stampsRef && !String(id).startsWith('local_')) {
     fbBusy(stampsRef.child(id).remove());
-  } else {
-    document.querySelector(`[data-id="${id}"]`)?.remove();
   }
 }
 
@@ -516,12 +518,6 @@ function onStampTouch(e) {
   if (e.touches.length > 1) return;
   e.stopPropagation(); // prevent board from starting stamp placement
   e.preventDefault();  // prevent scroll during drag + suppress synthetic click
-
-  if (ownerOf(e.currentTarget) !== person) {
-    deselect();
-    toast(`That's ${ownerOf(e.currentTarget)}'s stamp`);
-    return;
-  }
 
   dragging  = e.currentTarget;
   dragMoved = false;
@@ -587,12 +583,6 @@ function cleanDrag() {
 function onStampMouse(e) {
   if (e.button !== 0) return;
   e.stopPropagation();
-
-  if (ownerOf(e.currentTarget) !== person) {
-    deselect();
-    toast(`That's ${ownerOf(e.currentTarget)}'s stamp`);
-    return;
-  }
 
   dragging  = e.currentTarget;
   dragMoved = false;
