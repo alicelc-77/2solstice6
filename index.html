@@ -387,26 +387,37 @@ function setDay(day) {
   currentDay = day;
   document.querySelectorAll('.day-panel').forEach(p => p.classList.toggle('active', p.dataset.day === day));
   document.querySelectorAll('.day-btn').forEach(b => b.classList.toggle('active', b.dataset.day === day));
-  zoomLevel = 1; applyZoom();
+  zoomLevel = 1; applyZoom(window.innerWidth / 2, window.innerHeight / 2);
 }
 
-function applyZoom() {
+function applyZoom(anchorScreenX, anchorScreenY) {
   const baseH = window.innerHeight - 62;
-  const activePanel = document.getElementById('panel-' + currentDay);
-  if (!activePanel) return;
-  const img = activePanel.querySelector('.tt-img');
+  const panel = document.getElementById('panel-' + currentDay);
+  if (!panel) return;
+  const img    = panel.querySelector('.tt-img');
+  const canvas = panel.querySelector('.draw-canvas');
+  const dpr    = window.devicePixelRatio || 1;
+
+  // Before resize: record what fraction of the image is under the pinch anchor
+  const oldRect = img.getBoundingClientRect();
+  const anchorFracX = oldRect.width  ? (anchorScreenX - oldRect.left) / oldRect.width  : 0.5;
+  const anchorFracY = oldRect.height ? (anchorScreenY - oldRect.top  + workspaceWrap.scrollTop) / oldRect.height : 0.5;
+
   img.style.height = (baseH * zoomLevel) + 'px';
-  // Resize canvas to match new image dimensions
-  const canvas = activePanel.querySelector('.draw-canvas');
-  const dpr = window.devicePixelRatio || 1;
+
   requestAnimationFrame(() => {
-    const rect = img.getBoundingClientRect();
-    if (!rect.width) return;
-    canvas.width  = rect.width  * dpr;
-    canvas.height = rect.height * dpr;
+    const newRect = img.getBoundingClientRect();
+    if (!newRect.width) return;
+
+    // Scroll so the same image point stays under the pinch anchor
+    const desiredScrollTop = anchorFracY * newRect.height - (anchorScreenY - workspaceWrap.getBoundingClientRect().top);
+    workspaceWrap.scrollTop = Math.max(0, desiredScrollTop);
+
+    canvas.width  = newRect.width  * dpr;
+    canvas.height = newRect.height * dpr;
     const c = canvas.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    redrawCanvas(activePanel);
+    redrawCanvas(panel);
   });
 }
 
@@ -423,8 +434,10 @@ function selectTool(t) {
   currentTool = t;
   document.querySelectorAll('.tb-tool').forEach(b => b.classList.remove('active'));
   document.getElementById('tool-' + t).classList.add('active');
-  // Enable/disable canvas pointer events on all panels
-  document.querySelectorAll('.draw-canvas').forEach(c => { c.style.pointerEvents = t === 'pen' ? 'all' : 'none'; });
+  document.querySelectorAll('.draw-canvas').forEach(c => {
+    c.style.pointerEvents = t === 'pen' ? 'all' : 'none';
+    c.style.touchAction   = t === 'pen' ? 'none' : 'auto'; // prevent scroll eating pen strokes
+  });
 }
 
 // ── Press-to-stamp ────────────────────────────────────────
@@ -647,6 +660,7 @@ function cancelStampLongPress() { clearTimeout(stampLongPressTimer); stampLongPr
 // ── Workspace touch events ────────────────────────────────
 const workspace = document.getElementById('workspace');
 
+// ── Desktop mouse events ──────────────────────────────────
 workspace.addEventListener('mousedown', e => {
   if (e.target.closest('.stamp-el') || e.target.closest('.draw-canvas')) return;
   if (currentTool === 'stamp') stampPressStart(e.clientX, e.clientY);
@@ -660,15 +674,40 @@ workspace.addEventListener('mousemove', e => {
   if (isLoveMode) { loveHint.style.left = e.clientX + 'px'; loveHint.style.top = e.clientY + 'px'; }
 });
 
-// Touch: pinch zoom + stamp press
+// ── Mobile: click fires after any real tap (browser skips it for scrolls) ──
+workspace.addEventListener('click', e => {
+  if (window.innerWidth > 768) return; // desktop handled via mouseup above
+  if (e.target.closest('.stamp-el') || e.target.closest('.draw-canvas')) return;
+  if (currentTool !== 'stamp' || wasPinch) return;
+  deselectStamp();
+  placeStamp(e.clientX, e.clientY, isLoveMode ? 'love' : 'like');
+  isLoveMode = false;
+  document.getElementById('tool-stamp').classList.remove('love-mode');
+  loveHint.classList.remove('show');
+});
+
+// ── Mobile: pinch zoom + long-press love mode ─────────────
+let pinchMidX = 0, pinchMidY = 0;
+
 workspace.addEventListener('touchstart', e => {
-  activeTouches = Math.max(activeTouches, e.touches.length);
   if (e.touches.length === 2) {
-    wasPinch = true; stampPressCancel();
+    wasPinch = true;
+    clearTimeout(pressTimer); pressTimer = null; isLoveMode = false;
+    loveHint.classList.remove('show');
+    document.getElementById('tool-stamp').classList.remove('love-mode');
     pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
     pinchStartZoom = zoomLevel;
-  } else if (e.touches.length === 1 && !e.target.closest('.stamp-el') && !e.target.closest('.draw-canvas') && currentTool === 'stamp') {
-    stampPressStart(e.touches[0].clientX, e.touches[0].clientY);
+    pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  } else if (e.touches.length === 1 && currentTool === 'stamp' && !e.target.closest('.stamp-el')) {
+    pressX = e.touches[0].clientX; pressY = e.touches[0].clientY;
+    pressTimer = setTimeout(() => {
+      isLoveMode = true;
+      document.getElementById('tool-stamp').classList.add('love-mode');
+      loveHint.textContent = PERSONS[currentPerson].emoji;
+      loveHint.style.left = pressX + 'px'; loveHint.style.top = pressY + 'px';
+      loveHint.classList.add('show');
+    }, LOVE_MS);
   }
 }, { passive: true });
 
@@ -677,22 +716,28 @@ workspace.addEventListener('touchmove', e => {
     e.preventDefault();
     const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
     zoomLevel = Math.max(1, Math.min(5, pinchStartZoom * dist / pinchStartDist));
-    applyZoom();
-  } else if (isLoveMode) {
-    loveHint.style.left = e.touches[0].clientX + 'px'; loveHint.style.top = e.touches[0].clientY + 'px';
+    // Update midpoint as fingers move
+    pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    applyZoom(pinchMidX, pinchMidY);
+  } else if (e.touches.length === 1) {
+    // Cancel love mode if finger dragged
+    const moved = Math.hypot(e.touches[0].clientX - pressX, e.touches[0].clientY - pressY);
+    if (moved > 10 && pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (isLoveMode) { loveHint.style.left = e.touches[0].clientX + 'px'; loveHint.style.top = e.touches[0].clientY + 'px'; }
   }
 }, { passive: false });
 
 workspace.addEventListener('touchend', e => {
-  if (e.touches.length === 0) {
-    if (wasPinch || activeTouches > 1) { wasPinch = false; activeTouches = 0; stampPressCancel(); return; }
-    activeTouches = 0;
-    if (!e.target.closest('.stamp-el') && !e.target.closest('.draw-canvas') && currentTool === 'stamp') {
-      deselectStamp(); stampPressEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-    }
-  }
+  if (e.touches.length === 0) wasPinch = false;
+  clearTimeout(pressTimer); pressTimer = null;
 }, { passive: true });
-workspace.addEventListener('touchcancel', stampPressCancel, { passive: true });
+
+workspace.addEventListener('touchcancel', () => {
+  wasPinch = false; clearTimeout(pressTimer); pressTimer = null;
+  isLoveMode = false; loveHint.classList.remove('show');
+  document.getElementById('tool-stamp').classList.remove('love-mode');
+}, { passive: true });
 
 // ── Pen drawing ───────────────────────────────────────────
 document.querySelectorAll('.draw-canvas').forEach(canvas => {
