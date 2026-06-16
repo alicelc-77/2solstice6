@@ -876,6 +876,18 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Toolbar: stay pinned to visual viewport during iOS pinch-zoom ─────────────
+if (window.visualViewport) {
+  const tb = $('toolbar');
+  function syncToolbar() {
+    const vv = window.visualViewport;
+    tb.style.transform = `translate3d(${vv.offsetLeft}px, ${vv.offsetTop}px, 0)`;
+    tb.style.width = vv.width + 'px';
+  }
+  visualViewport.addEventListener('scroll', syncToolbar, { passive: true });
+  visualViewport.addEventListener('resize', syncToolbar, { passive: true });
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
