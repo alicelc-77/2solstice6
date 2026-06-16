@@ -292,7 +292,7 @@ const FB_CONFIG = {
   appId: '1:689871566233:web:26a49441f60069d46d4f08',
 };
 const PERSONS = {
-  N: { color: '#874FFF', text: 'white',   emoji: '👅' },
+  N: { color: '#874FFF', text: 'white',   emoji: '👾' },
   A: { color: '#F849C1', text: 'white',   emoji: '🦕' },
   L: { color: '#FBFF00', text: '#3a3000', emoji: '🧫' },
   I: { color: '#008CFF', text: 'white',   emoji: '🍞' },
@@ -386,6 +386,7 @@ function redrawPanel(panel) {
 // ── Toolbar controls ──────────────────────────────────────────────────────────
 function setPerson(p) {
   person = p;
+  localStorage.setItem('golatico-person', p);
   document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
   $('pb-' + p).classList.add('on');
   const badge = $('sbadge');
@@ -393,6 +394,8 @@ function setPerson(p) {
   badge.style.color = PERSONS[p].text;
   badge.textContent = p;
 }
+const _savedPerson = localStorage.getItem('golatico-person');
+if (_savedPerson && PERSONS[_savedPerson]) setPerson(_savedPerson);
 
 function setTool(t) {
   tool = t;
