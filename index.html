@@ -131,8 +131,9 @@
       font-size: 8px; font-weight: 800;
       border: 2px solid white; box-shadow: 0 1px 5px rgba(0,0,0,0.3);
     }
-    .love-stamp { position: relative; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.25)); }
-    .love-stamp-emoji { font-size: 42px; line-height: 1; display: none; }
+    .love-stamp { display: flex; flex-direction: column; align-items: center; line-height: 1; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.35)); }
+    .love-stamp-emoji { font-size: 36px; line-height: 1; display: block; }
+    .love-stamp-letter { font-size: 9px; font-weight: 800; margin-top: -2px; }
 
     #trash-zone {
       position: fixed;
@@ -370,42 +371,15 @@ function placeStamp(cx,cy,type){
   }else{const s={...data,id:'local_'+Date.now()};renderStampEl(s);localHistory.push({type:'stamp',id:s.id});redoStack=[];}
 }
 
-const stickerCache={};
-function loadCroppedSticker(src,imgEl){
-  if(stickerCache[src]){imgEl.src=stickerCache[src];return;}
-  const loader=new Image();
-  loader.onload=()=>{
-    try{
-      const c=document.createElement('canvas'); c.width=loader.naturalWidth; c.height=loader.naturalHeight;
-      const x=c.getContext('2d'); x.drawImage(loader,0,0);
-      const d=x.getImageData(0,0,c.width,c.height).data;
-      let minX=c.width,minY=c.height,maxX=0,maxY=0;
-      for(let i=0;i<d.length;i+=4){if(d[i+3]>8){const px=(i/4)%c.width,py=Math.floor((i/4)/c.width);if(px<minX)minX=px;if(px>maxX)maxX=px;if(py<minY)minY=py;if(py>maxY)maxY=py;}}
-      const pad=4; minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad); maxX=Math.min(c.width,maxX+pad); maxY=Math.min(c.height,maxY+pad);
-      const crop=document.createElement('canvas'); crop.width=maxX-minX; crop.height=maxY-minY;
-      crop.getContext('2d').drawImage(loader,minX,minY,crop.width,crop.height,0,0,crop.width,crop.height);
-      const url=crop.toDataURL('image/png'); stickerCache[src]=url; imgEl.src=url;
-    }catch(_){stickerCache[src]=src;imgEl.src=src;}
-  };
-  loader.onerror=()=>{imgEl.style.display='none';const fb=imgEl.nextElementSibling;if(fb)fb.style.display='flex';};
-  loader.src=src;
-}
-
 function renderStampEl(stamp){
   const panel=document.getElementById('panel-'+(stamp.day||'thu')); if(!panel)return;
   const p=PERSONS[stamp.person]||PERSONS['N'];
-  const el=document.createElement('div'); el.className='stamp-el'; el.dataset.id=stamp.id;
+  const el=document.createElement('div'); el.className='stamp-el'; el.dataset.id=stamp.id; el.dataset.person=stamp.person;
   el.style.left=stamp.px+'%'; el.style.top=stamp.py+'%';
   if(stamp.type==='like'){
     el.innerHTML=`<div class="like-stamp" style="background:${p.color};color:${p.textColor}">${stamp.person}</div>`;
   }else{
-    const w=document.createElement('div'); w.className='love-stamp';
-    const img=document.createElement('img'); img.alt=stamp.person; img.width=32; img.height=32;
-    img.style.cssText='display:block;pointer-events:none;width:32px;height:32px;object-fit:contain';
-    img.onerror=()=>{img.style.display='none';const fb=img.nextElementSibling;if(fb)fb.style.display='flex';};
-    loadCroppedSticker('./stickers/'+stamp.person+'.png',img);
-    const fb=document.createElement('span'); fb.className='love-stamp-emoji'; fb.textContent=p.emoji;
-    w.appendChild(img); w.appendChild(fb); el.appendChild(w);
+    el.innerHTML=`<div class="love-stamp"><span class="love-stamp-emoji">${p.emoji}</span><span class="love-stamp-letter" style="color:${p.textColor};text-shadow:0 0 4px rgba(0,0,0,0.5)">${stamp.person}</span></div>`;
   }
   el.addEventListener('click',e=>{e.stopPropagation();if(!dragMoved)selectStamp(stamp.id);});
   el.addEventListener('mousedown', startDragStamp);
@@ -448,7 +422,7 @@ trashZone.addEventListener('click',deleteSelected);
 trashZone.addEventListener('touchend',e=>{e.preventDefault();deleteSelected();});
 
 function stampOwner(el){
-  return el.querySelector('.like-stamp')?.textContent?.trim()||el.querySelector('img')?.alt||'';
+  return el.dataset.person||el.querySelector('.like-stamp')?.textContent?.trim()||'';
 }
 function startDragStamp(e){
   e.stopPropagation();
@@ -616,7 +590,7 @@ function redo(){const last=redoStack.pop();if(!last)return;localHistory.push(las
 function copyStamp(id){
   const el=document.querySelector(`[data-id="${id}"]`); if(!el)return;
   const isLike=!!el.querySelector('.like-stamp');
-  const person=(el.querySelector('.like-stamp')?.textContent||el.querySelector('img')?.alt)?.trim();
+  const person=el.dataset.person||el.querySelector('.like-stamp')?.textContent?.trim();
   if(person&&PERSONS[person]){clipboardStamp={person,type:isLike?'like':'love'};toast('Copied — Ctrl+V to paste');}
 }
 function pasteStamp(){
