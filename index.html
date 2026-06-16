@@ -260,7 +260,7 @@ let isDrawing=false, currentStroke=null, activeCanvas=null, activeCtx=null, last
 let draggingStamp=null, dragOffX=0, dragOffY=0, dragMoved=false;
 let contextStampId=null, selectedStampId=null, clipboardStamp=null, stampsRef;
 const LOVE_MS=450;
-let pressTimer=null, pressX=0, pressY=0, isLoveMode=false, wasPinch=false;
+let pressTimer=null, pressX=0, pressY=0, wasPinch=false;
 
 const loveHint=document.getElementById('love-hint');
 const ctxMenu=document.getElementById('ctx-menu');
@@ -459,67 +459,70 @@ let stampCtxTimer=null;
 function startStampCtx(e){stampCtxTimer=setTimeout(()=>{contextStampId=e.currentTarget.dataset.id;const t=e.touches[0];ctxMenu.style.left=Math.min(t.clientX,window.innerWidth-200)+'px';ctxMenu.style.top=Math.min(t.clientY,window.innerHeight-80)+'px';ctxMenu.style.display='block';},600);}
 function cancelStampCtx(){clearTimeout(stampCtxTimer);stampCtxTimer=null;}
 
-function cancelLoveTimer(){clearTimeout(pressTimer);pressTimer=null;}
-function endLoveMode(){isLoveMode=false;loveHint.classList.remove('show');document.getElementById('tool-stamp').classList.remove('love-mode');}
+// Love preview helpers — no global isLoveMode flag, use Date.now() at touchend instead
+function showLovePreview(x,y){
+  loveHint.textContent=PERSONS[currentPerson].emoji;
+  loveHint.style.left=x+'px'; loveHint.style.top=y+'px';
+  loveHint.classList.add('show');
+  document.getElementById('tool-stamp').classList.add('love-mode');
+}
+function clearLovePreview(){
+  clearTimeout(pressTimer); pressTimer=null;
+  loveHint.classList.remove('show');
+  document.getElementById('tool-stamp').classList.remove('love-mode');
+}
 
-// Desktop — mousedown/up only manage love-mode timer; click places the stamp
+// Desktop
 workspace.addEventListener('mousedown',e=>{
-  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
-  pressX=e.clientX; pressY=e.clientY; isLoveMode=false;
-  pressTimer=setTimeout(()=>{
-    isLoveMode=true;
-    document.getElementById('tool-stamp').classList.add('love-mode');
-    loveHint.textContent=PERSONS[currentPerson].emoji;
-    loveHint.style.left=pressX+'px'; loveHint.style.top=pressY+'px';
-    loveHint.classList.add('show');
-  },LOVE_MS);
+  if(currentTool!=='stamp'||e.target.closest('.stamp-el')||e.target.closest('.draw-canvas'))return;
+  pressX=e.clientX; pressY=e.clientY;
+  clearLovePreview();
+  pressTimer=setTimeout(()=>showLovePreview(pressX,pressY),LOVE_MS);
 });
 workspace.addEventListener('mousemove',e=>{
-  if(Math.hypot(e.clientX-pressX,e.clientY-pressY)>8)cancelLoveTimer();
-  if(isLoveMode){loveHint.style.left=e.clientX+'px';loveHint.style.top=e.clientY+'px';}
+  if(Math.hypot(e.clientX-pressX,e.clientY-pressY)>8)clearLovePreview();
+  if(pressTimer===null&&loveHint.classList.contains('show')){loveHint.style.left=e.clientX+'px';loveHint.style.top=e.clientY+'px';}
 });
-workspace.addEventListener('mouseup', e=>{
-  const wasLove=isLoveMode;
-  cancelLoveTimer(); endLoveMode();
-  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
-  if(Math.hypot(e.clientX-pressX,e.clientY-pressY)<8){deselectStamp();placeStamp(e.clientX,e.clientY,wasLove?'love':'like');}
+workspace.addEventListener('mouseup',e=>{
+  const isLove=loveHint.classList.contains('show');
+  clearLovePreview();
+  if(currentTool!=='stamp'||e.target.closest('.stamp-el')||e.target.closest('.draw-canvas'))return;
+  if(Math.hypot(e.clientX-pressX,e.clientY-pressY)<8){deselectStamp();placeStamp(e.clientX,e.clientY,isLove?'love':'like');}
 });
-workspace.addEventListener('mouseleave',()=>{cancelLoveTimer();endLoveMode();});
+workspace.addEventListener('mouseleave',()=>clearLovePreview());
 
-// Mobile touch
+// Mobile touch — use Date.now() comparison at touchend, no stuck-state bug possible
+let tapAt=0, tapX=0, tapY=0, tapMoved=false;
+
 workspace.addEventListener('touchstart',e=>{
-  if(e.touches.length>1){wasPinch=true;cancelLoveTimer();endLoveMode();return;}
-  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
-  pressX=e.touches[0].clientX; pressY=e.touches[0].clientY; isLoveMode=false;
-  pressTimer=setTimeout(()=>{
-    isLoveMode=true;
-    document.getElementById('tool-stamp').classList.add('love-mode');
-    loveHint.textContent=PERSONS[currentPerson].emoji;
-    loveHint.style.left=pressX+'px'; loveHint.style.top=pressY+'px';
-    loveHint.classList.add('show');
-  },LOVE_MS);
+  if(e.touches.length>1){wasPinch=true;clearLovePreview();return;}
+  if(currentTool!=='stamp')return;
+  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas'))return;
+  tapAt=Date.now(); tapMoved=false;
+  tapX=e.touches[0].clientX; tapY=e.touches[0].clientY;
+  clearLovePreview();
+  pressTimer=setTimeout(()=>showLovePreview(tapX,tapY),LOVE_MS);
 },{passive:true});
 
 workspace.addEventListener('touchmove',e=>{
-  if(e.touches.length>1){wasPinch=true;cancelLoveTimer();endLoveMode();return;}
-  if(Math.hypot(e.touches[0].clientX-pressX,e.touches[0].clientY-pressY)>10){cancelLoveTimer();endLoveMode();}
-  if(isLoveMode){loveHint.style.left=e.touches[0].clientX+'px';loveHint.style.top=e.touches[0].clientY+'px';}
+  if(e.touches.length>1){wasPinch=true;clearLovePreview();return;}
+  if(Math.hypot(e.touches[0].clientX-tapX,e.touches[0].clientY-tapY)>10){tapMoved=true;clearLovePreview();}
 },{passive:true});
 
 workspace.addEventListener('touchend',e=>{
-  const wasLove=isLoveMode; // capture BEFORE cancel — timer may have already fired
-  cancelLoveTimer(); endLoveMode(); // always reset, no exceptions
-  if(e.touches.length>0)return; // another finger still on screen
+  const held=(Date.now()-tapAt)>=LOVE_MS; // true if finger held long enough for love
+  clearLovePreview();
   if(wasPinch){wasPinch=false;return;}
-  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
+  if(tapMoved||e.touches.length>0)return;
+  if(currentTool!=='stamp')return;
+  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas'))return;
   const t=e.changedTouches[0];
-  if(Math.hypot(t.clientX-pressX,t.clientY-pressY)<12){
-    deselectStamp();
-    placeStamp(t.clientX,t.clientY,wasLove?'love':'like');
-  }
+  if(Math.hypot(t.clientX-tapX,t.clientY-tapY)>12)return;
+  deselectStamp();
+  placeStamp(t.clientX,t.clientY,held?'love':'like');
 },{passive:true});
 
-workspace.addEventListener('touchcancel',()=>{cancelLoveTimer();endLoveMode();wasPinch=false;},{passive:true});
+workspace.addEventListener('touchcancel',()=>{clearLovePreview();wasPinch=false;tapMoved=true;},{passive:true});
 
 // Pen
 document.querySelectorAll('.draw-canvas').forEach(canvas=>{
