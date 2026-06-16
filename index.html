@@ -217,16 +217,22 @@
   <button class="pbtn on" id="pb-N" style="background:#874FFF;color:white"   onclick="setPerson('N')">N</button>
   <button class="pbtn"    id="pb-A" style="background:#F849C1;color:white"   onclick="setPerson('A')">A</button>
   <button class="pbtn"    id="pb-L" style="background:#FBFF00;color:#3a3000" onclick="setPerson('L')">L</button>
-  <button class="pbtn"    id="pb-I" style="background:#FBFF00;color:#3a3000" onclick="setPerson('I')">I</button>
+  <button class="pbtn"    id="pb-I" style="background:#008CFF;color:white"   onclick="setPerson('I')">I</button>
   <div class="sep"></div>
   <div class="tgroup">
     <button class="tbtn on" id="tb-stamp" onclick="setTool('stamp')" title="Stamp">
-      <span class="badge" id="sbadge" style="background:#7B2FBE;color:white">N</span>
+      <span class="badge" id="sbadge" style="background:#874FFF;color:white">N</span>
     </button>
     <button class="tbtn" id="tb-pen" onclick="setTool('pen')" title="Pen">
       <svg viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
     </button>
+    <button class="tbtn" id="tb-eraser" onclick="setTool('eraser')" title="Eraser">
+      <svg viewBox="0 0 24 24"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/><path d="M6.5 17.5 10 14"/></svg>
+    </button>
   </div>
+  <button class="abtn" onclick="undo()" title="Undo (⌘Z)">
+    <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+  </button>
   <div class="sep"></div>
   <div id="day-tabs">
     <button class="dbtn on" data-day="thu" style="background:#9B5FC0" onclick="setDay('thu')">Thu 18</button>
@@ -234,9 +240,6 @@
     <button class="dbtn"    data-day="sat" style="background:#E8700A" onclick="setDay('sat')">Sat 20</button>
   </div>
   <div class="sep"></div>
-  <button class="abtn" onclick="undo()" title="Undo (⌘Z)">
-    <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
-  </button>
   <div id="sync"></div>
 </div>
 
@@ -292,7 +295,7 @@ const PERSONS = {
   N: { color: '#874FFF', text: 'white',   emoji: '👅' },
   A: { color: '#F849C1', text: 'white',   emoji: '🦕' },
   L: { color: '#FBFF00', text: '#3a3000', emoji: '🧫' },
-  I: { color: '#FBFF00', text: '#3a3000', emoji: '🍞' },
+  I: { color: '#008CFF', text: 'white',   emoji: '🍞' },
 };
 const LOVE_MS = 500; // hold duration for love stamp
 
@@ -395,10 +398,10 @@ function setTool(t) {
   tool = t;
   document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('on'));
   $('tb-' + t).classList.add('on');
-  // canvas only receives pointer events in pen mode
+  const drawMode = t === 'pen' || t === 'eraser';
   document.querySelectorAll('.clayer').forEach(c => {
-    c.style.pointerEvents = t === 'pen' ? 'all' : 'none';
-    c.style.touchAction   = t === 'pen' ? 'none' : 'auto';
+    c.style.pointerEvents = drawMode ? 'all' : 'none';
+    c.style.touchAction   = drawMode ? 'none' : 'auto';
   });
 }
 
@@ -778,23 +781,27 @@ function penPt(e) {
 }
 
 function penStart(e) {
-  if (tool !== 'pen') return;
+  if (tool !== 'pen' && tool !== 'eraser') return;
   if (e.cancelable) e.preventDefault();
   activeCanvas = e.currentTarget;
   activeCtx2d  = activeCanvas.getContext('2d');
   const pt     = penPt(e);
   lastPt       = pt;
+  const erasing = tool === 'eraser';
   stroke        = {
-    color:   PERSONS[person].color,
-    width:   5,
+    color:   erasing ? null : PERSONS[person].color,
+    width:   erasing ? 24 : 5,
+    eraser:  erasing,
     points:  [pt],
     panelId: activeCanvas.closest('.panel').id,
   };
   drawing = true;
-  activeCtx2d.beginPath();
-  activeCtx2d.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
-  activeCtx2d.fillStyle = stroke.color;
-  activeCtx2d.fill();
+  if (!erasing) {
+    activeCtx2d.beginPath();
+    activeCtx2d.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+    activeCtx2d.fillStyle = stroke.color;
+    activeCtx2d.fill();
+  }
 }
 
 function penMove(e) {
@@ -804,10 +811,17 @@ function penMove(e) {
   activeCtx2d.beginPath();
   activeCtx2d.moveTo(lastPt.x, lastPt.y);
   activeCtx2d.lineTo(pt.x, pt.y);
-  activeCtx2d.strokeStyle = stroke.color;
+  if (stroke.eraser) {
+    activeCtx2d.globalCompositeOperation = 'destination-out';
+    activeCtx2d.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    activeCtx2d.globalCompositeOperation = 'source-over';
+    activeCtx2d.strokeStyle = stroke.color;
+  }
   activeCtx2d.lineWidth   = stroke.width;
   activeCtx2d.lineCap = activeCtx2d.lineJoin = 'round';
   activeCtx2d.stroke();
+  activeCtx2d.globalCompositeOperation = 'source-over';
   lastPt = pt;
   stroke.points.push(pt);
 }
