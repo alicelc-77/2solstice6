@@ -271,7 +271,6 @@
 </div>
 
 <div id="toast"></div>
-<div style="position:fixed;bottom:6px;left:8px;z-index:9999;font-size:10px;font-weight:700;color:rgba(0,0,0,0.3);pointer-events:none">v9-debug</div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -433,7 +432,10 @@ function placeStamp(cx, cy, type) {
   };
   if (stampsRef) {
     const ref = stampsRef.push(data);
-    history.push({ type: 'stamp', id: ref.key });
+    const id  = ref.key;
+    // Render immediately — child_added dedup check skips it when Firebase confirms
+    renderStamp({ ...data, id });
+    history.push({ type: 'stamp', id });
     fbBusy(ref);
   } else {
     const s = { ...data, id: 'local_' + Date.now() };
@@ -698,22 +700,20 @@ board.addEventListener('touchend', e => {
   const held = Date.now() - tapAt;
   clearLoveFloat();
 
-  if (pinching)             { toast('⛔ pinch'); pinching = false; return; }
-  if (tapScrolled)          { toast('⛔ scrolled'); return; }
-  if (e.touches.length > 0) { toast('⛔ fingers'); return; }
-  if (tool !== 'stamp')     { toast('⛔ tool=' + tool); return; }
-  if (e.target.closest('.stamp') || e.target.closest('.clayer')) { toast('⛔ on stamp/canvas'); return; }
+  if (pinching)             { pinching = false; return; }
+  if (tapScrolled)          return;
+  if (e.touches.length > 0) return;
+  if (tool !== 'stamp')     return;
+  if (e.target.closest('.stamp') || e.target.closest('.clayer')) return;
 
   const t = e.changedTouches[0];
-  const dist = Math.hypot(t.clientX - tapX, t.clientY - tapY);
-  if (dist > 20) { toast('⛔ moved ' + Math.round(dist) + 'px'); return; }
+  if (Math.hypot(t.clientX - tapX, t.clientY - tapY) > 20) return;
 
-  toast('✅ placing ' + (held >= LOVE_MS ? 'love' : 'like'));
   placeStamp(t.clientX, t.clientY, held >= LOVE_MS ? 'love' : 'like');
 }, { passive: true });
 
 board.addEventListener('touchcancel', () => {
-  toast('⛔ cancelled'); clearLoveFloat(); pinching = false; tapScrolled = true;
+  clearLoveFloat(); pinching = false; tapScrolled = true;
 }, { passive: true });
 
 function clearLoveFloat() {
