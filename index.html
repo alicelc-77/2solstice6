@@ -2,247 +2,177 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Golatico 2026 — Timetable</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --toolbar-h: 62px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
-    :root {
-      --toolbar-h: 54px;
-      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-
-    body {
-      font-family: var(--font);
-      background: #0d0d0d;
-      height: 100dvh;
-      overflow: hidden;
-      touch-action: none;
-    }
+    body { font-family: var(--font); background: transparent; height: 100dvh; overflow: hidden; touch-action: none; }
 
     /* ── Toolbar ── */
     #toolbar {
-      position: fixed;
-      top: 0; left: 0; right: 0;
+      position: fixed; top: 0; left: 0; right: 0;
       height: var(--toolbar-h);
-      background: rgba(10,10,10,0.96);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 0 10px;
-      z-index: 200;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    #toolbar::-webkit-scrollbar { display: none; }
-
-    .tb-label {
-      font-size: 10px;
-      color: rgba(255,255,255,0.3);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      white-space: nowrap;
-      flex-shrink: 0;
-      margin-right: 1px;
+      background: rgba(255,255,255,0.97);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,0.07);
+      box-shadow: 0 1px 8px rgba(0,0,0,0.08);
+      display: flex; align-items: center; gap: 4px;
+      padding: 0 12px; z-index: 200;
     }
 
+    .tb-sep { width: 1px; height: 28px; background: rgba(0,0,0,0.1); margin: 0 4px; flex-shrink: 0; }
+
+    /* Person buttons — visible circles */
     .person-btn {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      border: 2px solid transparent;
-      cursor: pointer;
-      font-size: 13px; font-weight: 700;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 2.5px solid transparent; cursor: pointer;
+      font-size: 14px; font-weight: 800;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
       transition: transform .12s, border-color .12s;
       -webkit-tap-highlight-color: transparent;
     }
-    .person-btn.active { border-color: white; transform: scale(1.18); }
+    .person-btn.active { border-color: #222; transform: scale(1.15); }
 
-    .sep {
-      width: 1px; height: 24px;
-      background: rgba(255,255,255,0.1);
-      flex-shrink: 0; margin: 0 3px;
+    /* Tool buttons */
+    .tool-group {
+      display: flex; gap: 2px;
+      background: rgba(0,0,0,0.05);
+      border-radius: 12px; padding: 3px;
     }
 
-    .tool-btn {
-      height: 30px;
-      padding: 0 11px;
-      border-radius: 15px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: transparent;
-      cursor: pointer;
-      font-size: 12px;
-      color: rgba(255,255,255,0.45);
-      white-space: nowrap;
-      flex-shrink: 0;
-      transition: background .1s, color .1s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .tool-btn.active {
-      background: rgba(255,255,255,0.14);
-      color: white;
-      border-color: rgba(255,255,255,0.28);
-    }
-
-    .icon-btn {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: transparent;
-      cursor: pointer;
-      color: rgba(255,255,255,0.45);
-      font-size: 16px;
+    .tb-tool {
+      width: 42px; height: 42px; border-radius: 10px;
+      border: none; background: transparent; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
+      transition: background .1s;
       -webkit-tap-highlight-color: transparent;
+      flex-direction: column; gap: 2px;
+      position: relative;
     }
-    .icon-btn:active { background: rgba(255,255,255,0.1); }
+    .tb-tool:active { background: rgba(0,0,0,0.06); }
+    .tb-tool.active { background: #5c5ce0; }
+    .tb-tool.active svg { stroke: white; }
+    .tb-tool.active .tool-badge { border-color: white; }
+    .tb-tool svg { width: 20px; height: 20px; stroke: #444; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-    #pen-size-wrap {
-      display: none;
-      align-items: center;
-      gap: 5px;
+    /* Stamp tool: shows current person's badge as icon */
+    .tool-badge {
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 800;
+      border: 2.5px solid rgba(255,255,255,0.7);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Love mode pulse (during long press) */
+    .tb-tool.love-mode { background: rgba(212,55,126,0.12); }
+    .tb-tool.love-mode .tool-badge { animation: lovepulse .4s ease-in-out infinite alternate; }
+    @keyframes lovepulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+
+    /* Undo btn */
+    .tb-action {
+      width: 38px; height: 38px; border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.1); background: transparent; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
       flex-shrink: 0;
     }
-    #pen-size { width: 66px; accent-color: white; }
+    .tb-action:active { background: rgba(0,0,0,0.06); }
+    .tb-action svg { width: 18px; height: 18px; stroke: #555; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* ── Sync indicator ── */
-    #sync-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: #30d158;
-      flex-shrink: 0;
-      transition: background .4s;
-    }
+    /* Sync dot */
+    #sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; flex-shrink: 0; margin-left: auto; transition: background .4s; }
     #sync-dot.syncing { background: #ff9f0a; }
     #sync-dot.error   { background: #ff453a; }
-    #sync-dot.offline { background: #636366; }
+    #sync-dot.offline { background: #aaa; }
+
+    /* Love hint shown during long press */
+    #love-hint {
+      position: fixed; pointer-events: none; z-index: 500;
+      font-size: 28px; transform: translate(-50%, -100%) scale(0);
+      transition: transform .15s cubic-bezier(.34,1.56,.64,1);
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+    }
+    #love-hint.show { transform: translate(-50%, -130%) scale(1); }
 
     /* ── Workspace ── */
     #workspace-wrap {
-      position: fixed;
-      top: var(--toolbar-h);
-      left: 0; right: 0; bottom: 0;
-      overflow: scroll;
-      -webkit-overflow-scrolling: touch;
+      position: fixed; top: var(--toolbar-h); left: 0; right: 0; bottom: 0;
+      overflow: scroll; -webkit-overflow-scrolling: touch;
+      touch-action: pan-x pan-y;
     }
-
-    #workspace {
-      position: relative;
-      display: inline-block;
-      min-width: 100%;
-    }
+    #workspace { position: relative; display: inline-block; min-width: 100%; touch-action: none; }
 
     #timetable-img {
-      display: block;
-      /* Fill viewport height; image is wide — scroll horizontally */
-      height: calc(100dvh - var(--toolbar-h));
-      width: auto;
-      max-width: none;
-      pointer-events: none;
-      user-select: none;
-      -webkit-user-drag: none;
+      display: block; height: calc(100dvh - var(--toolbar-h)); width: auto; max-width: none;
+      pointer-events: none; user-select: none; -webkit-user-drag: none;
     }
 
-    #draw-canvas {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 1;
-      pointer-events: none;
-    }
-
-    #stamps-layer {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 2;
-      pointer-events: none;
-    }
+    #draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+    #stamps-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 
     /* ── Stamps ── */
     .stamp-el {
-      position: absolute;
-      transform: translate(-50%, -50%);
-      pointer-events: all;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
-      line-height: 1;
-      cursor: grab;
+      position: absolute; transform: translate(-50%, -50%);
+      pointer-events: all; user-select: none; -webkit-user-select: none;
+      touch-action: none; line-height: 1; cursor: grab;
     }
     .stamp-el:active { cursor: grabbing; }
-    .stamp-el.selected::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed white; pointer-events: none; }
+    .stamp-el.selected { outline: 2.5px dashed rgba(92,92,224,0.9); outline-offset: 5px; border-radius: 50%; }
 
     .like-stamp {
-      width: 30px; height: 30px;
-      border-radius: 50%;
+      width: 36px; height: 36px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 700;
-      border: 2px solid rgba(255,255,255,0.9);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+      font-size: 15px; font-weight: 800;
+      border: 3px solid white;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     }
 
     .love-stamp {
-      position: relative;
-      display: flex; align-items: center; justify-content: center;
-      width: 40px; height: 40px;
-      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.6));
+      position: relative; display: flex; align-items: center; justify-content: center;
+      filter: drop-shadow(0 3px 8px rgba(0,0,0,0.25));
     }
-    .love-stamp-emoji { font-size: 34px; line-height: 1; }
-    .love-letter {
-      position: absolute;
-      font-size: 11px; font-weight: 700;
-      text-shadow: 0 0 5px rgba(0,0,0,1), 0 1px 3px rgba(0,0,0,0.9);
-      line-height: 1;
+    .love-stamp-emoji { font-size: 42px; line-height: 1; display: none; }
+
+    /* Mobile delete FAB */
+    #mobile-delete {
+      display: none; position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); right: 20px;
+      z-index: 400;
+    }
+    #mobile-delete button {
+      width: 50px; height: 50px; border-radius: 25px;
+      background: #ff453a; color: white; border: none; font-size: 20px;
+      cursor: pointer; box-shadow: 0 4px 16px rgba(255,69,58,0.4);
+      display: flex; align-items: center; justify-content: center;
     }
 
-    /* ── Context menu ── */
+    /* Context menu */
     #ctx-menu {
-      position: fixed;
-      background: rgba(28,28,30,0.98);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      padding: 5px;
-      z-index: 500;
-      display: none;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.65);
-      min-width: 160px;
+      position: fixed; background: white;
+      border: 1px solid rgba(0,0,0,0.1); border-radius: 12px;
+      padding: 5px; z-index: 500; display: none;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.12); min-width: 180px;
     }
     #ctx-menu button {
-      display: flex; align-items: center; gap: 9px;
-      width: 100%;
-      padding: 9px 14px;
-      background: transparent; border: none;
-      color: #ff453a;
-      font-size: 14px; font-family: var(--font);
-      cursor: pointer;
-      border-radius: 8px;
-      white-space: nowrap;
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      padding: 9px 14px; background: transparent; border: none;
+      font-size: 14px; font-family: var(--font); cursor: pointer; border-radius: 8px; white-space: nowrap;
     }
-    #ctx-menu button:hover { background: rgba(255,255,255,0.06); }
+    #ctx-menu button:hover { background: rgba(0,0,0,0.04); }
+    #ctx-menu .danger { color: #ff453a; }
+    #ctx-menu .normal { color: #333; }
 
-    /* ── Toast ── */
+    /* Toast */
     #toast {
-      position: fixed;
-      bottom: env(safe-area-inset-bottom, 16px);
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.72);
-      color: rgba(255,255,255,0.85);
-      font-size: 12px;
-      padding: 7px 16px;
-      border-radius: 20px;
-      pointer-events: none;
-      z-index: 300;
-      opacity: 0;
-      transition: opacity .25s;
-      white-space: nowrap;
+      position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.75); color: white;
+      font-size: 12px; padding: 7px 16px; border-radius: 20px;
+      pointer-events: none; z-index: 600; opacity: 0; transition: opacity .25s; white-space: nowrap;
     }
     #toast.show { opacity: 1; }
   </style>
@@ -250,66 +180,68 @@
 <body>
 
 <div id="toolbar">
-  <div id="sync-dot" title="Sync status"></div>
-  <div class="sep"></div>
-
-  <span class="tb-label">who</span>
+  <!-- Person buttons -->
   <button class="person-btn active" id="btn-N" style="background:#7B2FBE;color:white"   onclick="selectPerson('N')">N</button>
   <button class="person-btn"        id="btn-A" style="background:#D4378C;color:white"   onclick="selectPerson('A')">A</button>
   <button class="person-btn"        id="btn-L" style="background:#F5C400;color:#3a2800" onclick="selectPerson('L')">L</button>
   <button class="person-btn"        id="btn-I" style="background:#2196F3;color:white"   onclick="selectPerson('I')">I</button>
 
-  <div class="sep"></div>
+  <div class="tb-sep"></div>
 
-  <span class="tb-label">tool</span>
-  <button class="tool-btn active" id="tool-like" onclick="selectTool('like')">● like</button>
-  <button class="tool-btn"        id="tool-love" onclick="selectTool('love')">♥ love</button>
-  <button class="tool-btn"        id="tool-pen"  onclick="selectTool('pen')">✏ pen</button>
-
-  <div id="pen-size-wrap">
-    <span style="font-size:11px;color:rgba(255,255,255,0.3)">size</span>
-    <input type="range" id="pen-size" min="1" max="10" value="3" step="1">
+  <!-- Tools -->
+  <div class="tool-group">
+    <!-- Stamp: short tap = like, hold = love -->
+    <button class="tb-tool active" id="tool-stamp" onclick="selectTool('stamp')" title="Stamp — tap for like, hold for love">
+      <span class="tool-badge" id="stamp-badge" style="background:#7B2FBE;color:white">N</span>
+    </button>
+    <!-- Marker -->
+    <button class="tb-tool" id="tool-pen" onclick="selectTool('pen')" title="Marker">
+      <svg viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+    </button>
   </div>
 
-  <div class="sep"></div>
-  <button class="icon-btn" onclick="undo()" title="Undo last action">↩</button>
+  <div class="tb-sep"></div>
+
+  <!-- Undo -->
+  <button class="tb-action" onclick="undo()" title="Undo (Ctrl+Z)">
+    <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+  </button>
+
+  <div id="sync-dot" title="Sync status"></div>
 </div>
+
+<!-- Long-press love hint emoji (follows cursor) -->
+<div id="love-hint"></div>
 
 <div id="workspace-wrap">
   <div id="workspace">
-    <!--
-      ════════════════════════════════════════════════════
-      PUT YOUR TIMETABLE IMAGE IN THE SAME FOLDER AS THIS
-      FILE AND NAME IT timetable.jpg  (or change src below)
-      ════════════════════════════════════════════════════
-    -->
     <img id="timetable-img" src="./timetable.jpg" alt="Golatico 2026 timetable" draggable="false">
     <canvas id="draw-canvas"></canvas>
     <div id="stamps-layer"></div>
   </div>
 </div>
 
+<div id="mobile-delete">
+  <button onclick="deleteSelected()">🗑</button>
+</div>
+
 <div id="ctx-menu">
-  <button onclick="deleteContextStamp()">🗑 Remove stamp</button>
+  <button class="normal" onclick="copyStamp(contextStampId); ctxMenu.style.display='none'">⎘ Copy stamp</button>
+  <button class="danger" onclick="deleteContextStamp()">🗑 Remove stamp</button>
 </div>
 
 <div id="toast"></div>
 
 <!--
   ══════════════════════════════════════════════════════════
-  FIREBASE SETUP — do this once:
-
-  1. Go to console.firebase.google.com
-  2. Create a project (any name, e.g. "golatico")
-  3. Add a Web app (</> icon) — copy the firebaseConfig object
-  4. Go to Build → Realtime Database → Create database
-     Choose "Start in test mode" (good for ~30 days, fine for a festival)
-  5. Paste your config values into the object below
+  FIREBASE SETUP:
+  1. console.firebase.google.com → new project → Web app
+  2. Build → Realtime Database → Create database (test mode)
+  3. Paste your config below
   ══════════════════════════════════════════════════════════
 -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
 <script>
 // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────
 const firebaseConfig = {
@@ -331,92 +263,135 @@ const PERSONS = {
 };
 
 // ── State ─────────────────────────────────────────────────
-let currentPerson = 'N';
-let currentTool   = 'like';
-let strokes       = [];       // local pen strokes (not persisted)
-let localHistory  = [];       // undo stack for THIS session
-let isDrawing     = false;
-let currentStroke = null;
-let lastPos       = null;
-let draggingStamp = null;
+let currentPerson   = 'N';
+let currentTool     = 'stamp';
+let strokes         = [];
+let localHistory    = [];
+let redoStack       = [];
+let isDrawing       = false;
+let currentStroke   = null;
+let lastPos         = null;
+let draggingStamp   = null;
 let dragOffX = 0, dragOffY = 0;
-let isDragging    = false;
-let dragMoved     = false;
-let contextStampId = null;
+let isDragging      = false;
+let dragMoved       = false;
+let contextStampId  = null;
 let selectedStampId = null;
-let longPressTimer = null;
+let longPressTimer  = null;
+let clipboardStamp  = null;
 let stampsRef;
 
-// ── Elements ──────────────────────────────────────────────
-const canvas      = document.getElementById('draw-canvas');
-const ctx         = canvas.getContext('2d');
-const workspace   = document.getElementById('workspace');
-const stampsLayer = document.getElementById('stamps-layer');
-const syncDot     = document.getElementById('sync-dot');
-const img         = document.getElementById('timetable-img');
+// Press-to-stamp state
+const LOVE_MS       = 450;
+let pressStart      = 0;
+let pressX          = 0, pressY = 0;
+let pressTimer      = null;
+let isLoveMode      = false;
+let activeTouches   = 0;
+let wasPinch        = false;
+let pinchStartDist  = 0;
+let pinchStartZoom  = 1;
+let zoomLevel       = 1;
 
-// ── Firebase init ─────────────────────────────────────────
+// ── Elements ──────────────────────────────────────────────
+const canvas        = document.getElementById('draw-canvas');
+const ctx           = canvas.getContext('2d');
+const workspace     = document.getElementById('workspace');
+const workspaceWrap = document.getElementById('workspace-wrap');
+const stampsLayer   = document.getElementById('stamps-layer');
+const syncDot       = document.getElementById('sync-dot');
+const img           = document.getElementById('timetable-img');
+const ctxMenu       = document.getElementById('ctx-menu');
+const loveHint      = document.getElementById('love-hint');
+
+// ── Firebase ──────────────────────────────────────────────
 try {
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   stampsRef = db.ref('golatico/stamps');
-
-  stampsRef.on('child_added', snap => {
-    const data = snap.val();
-    if (!stampsLayer.querySelector(`[data-id="${snap.key}"]`)) {
-      renderStampEl({ ...data, id: snap.key });
-    }
-  });
-
-  stampsRef.on('child_changed', snap => {
-    const data = snap.val();
-    const el = stampsLayer.querySelector(`[data-id="${snap.key}"]`);
-    if (el) { el.style.left = data.px + '%'; el.style.top = data.py + '%'; }
-  });
-
-  stampsRef.on('child_removed', snap => {
-    stampsLayer.querySelector(`[data-id="${snap.key}"]`)?.remove();
-  });
-
-  db.ref('.info/connected').on('value', snap => {
-    syncDot.className = snap.val() ? '' : 'offline';
-  });
-
+  stampsRef.on('child_added',   snap => { if (!stampsLayer.querySelector(`[data-id="${snap.key}"]`)) renderStampEl({ ...snap.val(), id: snap.key }); });
+  stampsRef.on('child_changed', snap => { const d = snap.val(), el = stampsLayer.querySelector(`[data-id="${snap.key}"]`); if (el) { el.style.left = d.px + '%'; el.style.top = d.py + '%'; } });
+  stampsRef.on('child_removed', snap => { stampsLayer.querySelector(`[data-id="${snap.key}"]`)?.remove(); });
+  db.ref('.info/connected').on('value', snap => { syncDot.className = snap.val() ? '' : 'offline'; });
 } catch(e) {
   syncDot.className = 'error';
-  toast('Firebase not configured — stamps won\'t save across devices');
+  toast('Firebase not configured — stamps won\'t sync');
   console.warn('Firebase:', e);
 }
 
-// ── Canvas resize ─────────────────────────────────────────
-// Draw in CSS-pixel space × devicePixelRatio so strokes are crisp on retina.
+// ── Canvas ────────────────────────────────────────────────
 img.addEventListener('load', resizeCanvas);
 if (img.complete) resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
 function resizeCanvas() {
-  const dpr  = window.devicePixelRatio || 1;
-  const rect = img.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1, rect = img.getBoundingClientRect();
   if (!rect.width) return;
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw coords = CSS pixels
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   redrawCanvas();
 }
 
-// ── Person / tool selection ───────────────────────────────
+// ── Zoom ──────────────────────────────────────────────────
+function applyZoom() {
+  const baseH = window.innerHeight - 62;
+  img.style.height = (baseH * zoomLevel) + 'px';
+  resizeCanvas();
+}
+
+// ── Person selection ──────────────────────────────────────
 function selectPerson(p) {
   currentPerson = p;
   document.querySelectorAll('.person-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-' + p).classList.add('active');
+  // Update stamp tool badge to reflect current person
+  const pp = PERSONS[p];
+  const badge = document.getElementById('stamp-badge');
+  if (badge) { badge.style.background = pp.color; badge.style.color = pp.textColor; badge.textContent = p; }
 }
 
+// ── Tool selection ────────────────────────────────────────
 function selectTool(t) {
   currentTool = t;
-  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tb-tool').forEach(b => b.classList.remove('active'));
   document.getElementById('tool-' + t).classList.add('active');
-  document.getElementById('pen-size-wrap').style.display = t === 'pen' ? 'flex' : 'none';
   canvas.style.pointerEvents = t === 'pen' ? 'all' : 'none';
+}
+
+// ── Press-to-stamp (tap = like, hold = love) ──────────────
+function stampPressStart(clientX, clientY) {
+  if (currentTool !== 'stamp') return;
+  pressStart = Date.now(); pressX = clientX; pressY = clientY;
+  isLoveMode = false;
+  pressTimer = setTimeout(() => {
+    isLoveMode = true;
+    document.getElementById('tool-stamp').classList.add('love-mode');
+    // Show floating love emoji near press point
+    const p = PERSONS[currentPerson];
+    loveHint.textContent = p.emoji;
+    loveHint.style.left = clientX + 'px';
+    loveHint.style.top  = clientY + 'px';
+    loveHint.classList.add('show');
+  }, LOVE_MS);
+}
+
+function stampPressEnd(clientX, clientY) {
+  if (currentTool !== 'stamp') return;
+  clearTimeout(pressTimer);
+  document.getElementById('tool-stamp').classList.remove('love-mode');
+  loveHint.classList.remove('show');
+  const moved = Math.hypot(clientX - pressX, clientY - pressY);
+  if (moved < 12 && !isDragging && !dragMoved && !wasPinch && activeTouches <= 1) {
+    placeStamp(clientX, clientY, isLoveMode ? 'love' : 'like');
+  }
+  isLoveMode = false;
+}
+
+function stampPressCancel() {
+  clearTimeout(pressTimer);
+  isLoveMode = false;
+  document.getElementById('tool-stamp').classList.remove('love-mode');
+  loveHint.classList.remove('show');
 }
 
 // ── Stamp placement ───────────────────────────────────────
@@ -428,57 +403,129 @@ function getWorkspacePct(clientX, clientY) {
   };
 }
 
-function placeStamp(clientX, clientY) {
+function placeStamp(clientX, clientY, type) {
   const { px, py } = getWorkspacePct(clientX, clientY);
-  const data = { person: currentPerson, type: currentTool, px, py };
-
+  const data = { person: currentPerson, type, px, py };
   if (stampsRef) {
     syncDot.className = 'syncing';
     const ref = stampsRef.push(data);
     localHistory.push({ type: 'stamp', id: ref.key });
+    redoStack = [];
     ref.then(() => { syncDot.className = ''; }).catch(() => { syncDot.className = 'error'; });
   } else {
-    // Offline fallback — local only
     const stamp = { ...data, id: 'local_' + Date.now() };
     renderStampEl(stamp);
-    localHistory.push({ type: 'stamp', id: stamp.id, local: true, el: stampsLayer.lastElementChild });
+    localHistory.push({ type: 'stamp', id: stamp.id });
+    redoStack = [];
   }
 }
 
+// ── Auto-crop transparent padding from sticker PNGs ──────
+const stickerCache = {};
+function loadCroppedSticker(src, imgEl) {
+  if (stickerCache[src]) { imgEl.src = stickerCache[src]; return; }
+  const loader = new Image();
+  loader.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = loader.naturalWidth; c.height = loader.naturalHeight;
+      const x = c.getContext('2d');
+      x.drawImage(loader, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      let minX = c.width, minY = c.height, maxX = 0, maxY = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 8) {
+          const px = (i / 4) % c.width, py = Math.floor((i / 4) / c.width);
+          if (px < minX) minX = px; if (px > maxX) maxX = px;
+          if (py < minY) minY = py; if (py > maxY) maxY = py;
+        }
+      }
+      const pad = 4;
+      minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+      maxX = Math.min(c.width, maxX + pad); maxY = Math.min(c.height, maxY + pad);
+      const crop = document.createElement('canvas');
+      crop.width = maxX - minX; crop.height = maxY - minY;
+      crop.getContext('2d').drawImage(loader, minX, minY, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      const url = crop.toDataURL('image/png');
+      stickerCache[src] = url;
+      imgEl.src = url;
+    } catch(_) {
+      // Canvas tainted (e.g. local file://) — just use the image directly at full size
+      stickerCache[src] = src;
+      imgEl.src = src;
+    }
+  };
+  loader.onerror = () => {
+    // File not found — show emoji fallback
+    imgEl.style.display = 'none';
+    const fb = imgEl.nextElementSibling;
+    if (fb) fb.style.display = 'flex';
+  };
+  loader.src = src;
+}
+
 function renderStampEl(stamp) {
-  const p = PERSONS[stamp.person];
+  const p  = PERSONS[stamp.person];
   const el = document.createElement('div');
   el.className  = 'stamp-el';
   el.dataset.id = stamp.id;
   el.style.left = stamp.px + '%';
   el.style.top  = stamp.py + '%';
-
   if (stamp.type === 'like') {
     el.innerHTML = `<div class="like-stamp" style="background:${p.color};color:${p.textColor}">${stamp.person}</div>`;
   } else {
-    el.innerHTML = `<div class="love-stamp">
-      <span class="love-stamp-emoji">${p.emoji}</span>
-      <span class="love-letter" style="color:${p.letterColor}">${stamp.person}</span>
-    </div>`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'love-stamp';
+    const imgEl = document.createElement('img');
+    imgEl.alt = stamp.person + ' sticker';
+    imgEl.style.cssText = 'display:block;pointer-events:none;width:64px;height:64px;object-fit:contain';
+    imgEl.onerror = () => {
+      imgEl.style.display = 'none';
+      const fb = document.createElement('span');
+      fb.className = 'love-stamp-emoji'; fb.textContent = p.emoji; fb.style.display = 'flex';
+      wrapper.appendChild(fb);
+    };
+    loadCroppedSticker('./stickers/' + stamp.person + '.png', imgEl);
+    wrapper.appendChild(imgEl);
+    el.appendChild(wrapper);
   }
-
-  el.addEventListener('click', e => { e.stopPropagation(); selectStamp(stamp.id); });
+  el.addEventListener('click',       e => { e.stopPropagation(); selectStamp(stamp.id); });
   el.addEventListener('mousedown',   startDragStamp);
   el.addEventListener('touchstart',  startDragStamp,  { passive: false });
   el.addEventListener('contextmenu', showCtxMenuFromEvent);
-  el.addEventListener('touchstart',  startLongPress,  { passive: true });
-  el.addEventListener('touchend',    cancelLongPress);
-  el.addEventListener('touchmove',   cancelLongPress, { passive: true });
+  el.addEventListener('touchstart',  startStampLongPress, { passive: true });
+  el.addEventListener('touchend',    cancelStampLongPress);
+  el.addEventListener('touchmove',   cancelStampLongPress, { passive: true });
   stampsLayer.appendChild(el);
+}
+
+// ── Stamp selection ───────────────────────────────────────
+function selectStamp(id) {
+  document.querySelectorAll('.stamp-el.selected').forEach(e => e.classList.remove('selected'));
+  selectedStampId = id; contextStampId = id;
+  stampsLayer.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
+  document.getElementById('mobile-delete').style.display = 'block';
+}
+
+function deselectStamp() {
+  document.querySelectorAll('.stamp-el.selected').forEach(e => e.classList.remove('selected'));
+  selectedStampId = null;
+  document.getElementById('mobile-delete').style.display = 'none';
+}
+
+function deleteSelected() {
+  if (!selectedStampId) return;
+  contextStampId = selectedStampId; selectedStampId = null;
+  document.getElementById('mobile-delete').style.display = 'none';
+  deleteContextStamp();
 }
 
 // ── Stamp dragging ────────────────────────────────────────
 function startDragStamp(e) {
   e.stopPropagation();
   if (e.cancelable) e.preventDefault();
-  cancelLongPress();
-  isDragging = false;
-  dragMoved  = false;
+  stampPressCancel(); cancelStampLongPress();
+  isDragging = false; dragMoved = false;
   draggingStamp = e.currentTarget;
   const rect = workspace.getBoundingClientRect();
   const cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -494,30 +541,24 @@ function startDragStamp(e) {
 function moveDragStamp(e) {
   if (!draggingStamp) return;
   if (e.cancelable) e.preventDefault();
-  isDragging = true;
-  dragMoved  = true;
-  cancelLongPress();
+  isDragging = true; dragMoved = true;
   const rect = workspace.getBoundingClientRect();
   const cx = e.touches ? e.touches[0].clientX : e.clientX;
   const cy = e.touches ? e.touches[0].clientY : e.clientY;
   const px = Math.max(0, Math.min(100, (cx - dragOffX - rect.left) / rect.width  * 100));
   const py = Math.max(0, Math.min(100, (cy - dragOffY - rect.top)  / rect.height * 100));
-  draggingStamp.style.left = px + '%';
-  draggingStamp.style.top  = py + '%';
+  draggingStamp.style.left = px + '%'; draggingStamp.style.top = py + '%';
 }
 
 function stopDragStamp() {
   if (draggingStamp && dragMoved && stampsRef) {
-    const id = draggingStamp.dataset.id;
-    const px = parseFloat(draggingStamp.style.left);
-    const py = parseFloat(draggingStamp.style.top);
     syncDot.className = 'syncing';
-    stampsRef.child(id).update({ px, py })
-      .then(() => { syncDot.className = ''; })
-      .catch(() => { syncDot.className = 'error'; });
+    stampsRef.child(draggingStamp.dataset.id).update({
+      px: parseFloat(draggingStamp.style.left),
+      py: parseFloat(draggingStamp.style.top),
+    }).then(() => { syncDot.className = ''; });
   }
   draggingStamp = null;
-  // Brief delay so click handler can check isDragging
   setTimeout(() => { isDragging = false; dragMoved = false; }, 80);
   document.removeEventListener('mousemove', moveDragStamp);
   document.removeEventListener('mouseup',   stopDragStamp);
@@ -525,29 +566,14 @@ function stopDragStamp() {
   document.removeEventListener('touchend',  stopDragStamp);
 }
 
-// ── Stamp selection ───────────────────────────────────────
-function selectStamp(id) {
-  document.querySelectorAll('.stamp-el.selected').forEach(el => el.classList.remove('selected'));
-  selectedStampId = id;
-  contextStampId  = id;
-  stampsLayer.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
-}
-
-function deselectStamp() {
-  document.querySelectorAll('.stamp-el.selected').forEach(el => el.classList.remove('selected'));
-  selectedStampId = null;
-}
-
-// ── Context menu / long-press delete ─────────────────────
-const ctxMenu = document.getElementById('ctx-menu');
+// ── Context menu + long-press on existing stamp ───────────
+let stampLongPressTimer = null;
 
 function showCtxMenuFromEvent(e) {
   e.preventDefault();
   contextStampId = e.currentTarget.dataset.id;
-  const x = Math.min(e.clientX, window.innerWidth  - 180);
-  const y = Math.min(e.clientY, window.innerHeight - 60);
-  ctxMenu.style.left    = x + 'px';
-  ctxMenu.style.top     = y + 'px';
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 80) + 'px';
   ctxMenu.style.display = 'block';
 }
 
@@ -566,47 +592,76 @@ function deleteContextStamp() {
 document.addEventListener('click',      () => { ctxMenu.style.display = 'none'; });
 document.addEventListener('touchstart', () => { ctxMenu.style.display = 'none'; }, { passive: true });
 
-function startLongPress(e) {
-  longPressTimer = setTimeout(() => {
+function startStampLongPress(e) {
+  stampLongPressTimer = setTimeout(() => {
     contextStampId = e.currentTarget.dataset.id;
     const t = e.touches[0];
-    const x = Math.min(t.clientX, window.innerWidth  - 180);
-    const y = Math.min(t.clientY, window.innerHeight - 60);
-    ctxMenu.style.left    = x + 'px';
-    ctxMenu.style.top     = y + 'px';
+    ctxMenu.style.left = Math.min(t.clientX, window.innerWidth - 200) + 'px';
+    ctxMenu.style.top  = Math.min(t.clientY, window.innerHeight - 80) + 'px';
     ctxMenu.style.display = 'block';
   }, 600);
 }
-function cancelLongPress() {
-  clearTimeout(longPressTimer);
-  longPressTimer = null;
-}
+function cancelStampLongPress() { clearTimeout(stampLongPressTimer); stampLongPressTimer = null; }
 
-// ── Workspace tap → place stamp ───────────────────────────
-workspace.addEventListener('click', e => {
-  if (currentTool === 'pen') return;
-  if (isDragging || dragMoved) return;
+// ── Workspace interactions ────────────────────────────────
+// Mouse
+workspace.addEventListener('mousedown', e => {
   if (e.target.closest('.stamp-el')) return;
-  deselectStamp();
-  placeStamp(e.clientX, e.clientY);
+  if (currentTool === 'stamp') stampPressStart(e.clientX, e.clientY);
+});
+workspace.addEventListener('mouseup', e => {
+  if (e.target.closest('.stamp-el')) return;
+  if (currentTool === 'stamp') { deselectStamp(); stampPressEnd(e.clientX, e.clientY); }
+});
+workspace.addEventListener('mouseleave', stampPressCancel);
+workspace.addEventListener('mousemove', e => {
+  if (isLoveMode) { loveHint.style.left = e.clientX + 'px'; loveHint.style.top = e.clientY + 'px'; }
 });
 
-workspace.addEventListener('touchend', e => {
-  if (currentTool === 'pen') return;
-  if (isDragging || dragMoved) return;
-  if (e.target.closest('.stamp-el')) return;
-  if (e.changedTouches.length === 1) {
-    placeStamp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+// Touch — pinch zoom
+workspace.addEventListener('touchstart', e => {
+  activeTouches = Math.max(activeTouches, e.touches.length);
+  if (e.touches.length === 2) {
+    wasPinch = true;
+    stampPressCancel();
+    pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    pinchStartZoom = zoomLevel;
+  } else if (e.touches.length === 1 && !e.target.closest('.stamp-el') && currentTool === 'stamp') {
+    stampPressStart(e.touches[0].clientX, e.touches[0].clientY);
   }
 }, { passive: true });
 
-// ── Pen drawing (local only, not persisted) ───────────────
+workspace.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    zoomLevel = Math.max(1, Math.min(5, pinchStartZoom * dist / pinchStartDist));
+    applyZoom();
+  } else if (isLoveMode && e.touches.length === 1) {
+    loveHint.style.left = e.touches[0].clientX + 'px';
+    loveHint.style.top  = e.touches[0].clientY + 'px';
+  }
+}, { passive: false });
+
+workspace.addEventListener('touchend', e => {
+  if (e.touches.length === 0) {
+    if (wasPinch || activeTouches > 1) {
+      wasPinch = false; activeTouches = 0; stampPressCancel(); return;
+    }
+    activeTouches = 0;
+    if (!e.target.closest('.stamp-el') && currentTool === 'stamp') {
+      deselectStamp();
+      stampPressEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    }
+  }
+}, { passive: true });
+
+workspace.addEventListener('touchcancel', stampPressCancel, { passive: true });
+
+// ── Pen drawing ───────────────────────────────────────────
 function getCanvasPos(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
-  return {
-    x: clientX - rect.left,
-    y: clientY - rect.top,
-  };
+  return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
 canvas.addEventListener('mousedown',  startDraw);
@@ -625,12 +680,10 @@ function startDraw(e) {
   const cy = e.touches ? e.touches[0].clientY : e.clientY;
   const pos = getCanvasPos(cx, cy);
   lastPos = pos;
-  const w = parseInt(document.getElementById('pen-size').value) * 2;
+  const w = parseInt(document.getElementById('pen-size')?.value || 3) * 2;
   currentStroke = { color: PERSONS[currentPerson].color, width: w, points: [pos] };
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, w / 2, 0, Math.PI * 2);
-  ctx.fillStyle = currentStroke.color;
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(pos.x, pos.y, w / 2, 0, Math.PI * 2);
+  ctx.fillStyle = currentStroke.color; ctx.fill();
 }
 
 function continueDraw(e) {
@@ -639,15 +692,10 @@ function continueDraw(e) {
   const cx = e.touches ? e.touches[0].clientX : e.clientX;
   const cy = e.touches ? e.touches[0].clientY : e.clientY;
   const pos = getCanvasPos(cx, cy);
-  ctx.beginPath();
-  ctx.moveTo(lastPos.x, lastPos.y);
-  ctx.lineTo(pos.x, pos.y);
-  ctx.strokeStyle = currentStroke.color;
-  ctx.lineWidth   = currentStroke.width;
-  ctx.lineCap = ctx.lineJoin = 'round';
-  ctx.stroke();
-  lastPos = pos;
-  currentStroke.points.push(pos);
+  ctx.beginPath(); ctx.moveTo(lastPos.x, lastPos.y); ctx.lineTo(pos.x, pos.y);
+  ctx.strokeStyle = currentStroke.color; ctx.lineWidth = currentStroke.width;
+  ctx.lineCap = ctx.lineJoin = 'round'; ctx.stroke();
+  lastPos = pos; currentStroke.points.push(pos);
 }
 
 function stopDraw() {
@@ -656,160 +704,94 @@ function stopDraw() {
   if (currentStroke?.points.length > 0) {
     strokes.push(currentStroke);
     localHistory.push({ type: 'stroke', idx: strokes.length - 1 });
+    redoStack = [];
   }
-  currentStroke = null;
-  lastPos = null;
+  currentStroke = null; lastPos = null;
 }
 
 function redrawCanvas() {
-  const dpr  = window.devicePixelRatio || 1;
   const rect = img.getBoundingClientRect();
-  // Clear in CSS-pixel space (transform already applied)
   ctx.clearRect(0, 0, rect.width, rect.height);
   for (const s of strokes) {
     if (!s?.points.length) continue;
-    ctx.strokeStyle = ctx.fillStyle = s.color;
-    ctx.lineWidth = s.width;
-    ctx.lineCap = ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.arc(s.points[0].x, s.points[0].y, s.width / 2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.strokeStyle = ctx.fillStyle = s.color; ctx.lineWidth = s.width; ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.arc(s.points[0].x, s.points[0].y, s.width / 2, 0, Math.PI * 2); ctx.fill();
     if (s.points.length > 1) {
-      ctx.beginPath();
-      ctx.moveTo(s.points[0].x, s.points[0].y);
+      ctx.beginPath(); ctx.moveTo(s.points[0].x, s.points[0].y);
       for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
       ctx.stroke();
     }
   }
 }
 
-
-// ── Clipboard (stamp copy/paste) ──────────────────────────
-let clipboardStamp = null; // { person, type }
-
-function copyStamp(id) {
-  const el = stampsLayer.querySelector(`[data-id="${id}"]`);
-  if (!el) return;
-  // Infer person/type from CSS classes on children
-  const isLike = !!el.querySelector('.like-stamp');
-  const person = (el.querySelector('.like-stamp') || el.querySelector('.love-letter'))?.textContent?.trim();
-  if (person) {
-    clipboardStamp = { person, type: isLike ? 'like' : 'love' };
-    toast(`Copied ${person}'s ${clipboardStamp.type} stamp`);
+// ── Undo / Redo ───────────────────────────────────────────
+function undo() {
+  const last = localHistory.pop(); if (!last) return;
+  redoStack.push(last);
+  if (last.type === 'stroke') { strokes.splice(last.idx, 1); redrawCanvas(); }
+  else if (last.type === 'stamp') {
+    if (stampsRef && !last.id.startsWith('local_')) { syncDot.className = 'syncing'; stampsRef.child(last.id).remove().then(() => { syncDot.className = ''; }); }
+    else stampsLayer.querySelector(`[data-id="${last.id}"]`)?.remove();
   }
+}
+
+function redo() {
+  const last = redoStack.pop(); if (!last) return;
+  localHistory.push(last);
+  if (last.type === 'stroke' && last.stroke) { strokes.splice(last.idx, 0, last.stroke); redrawCanvas(); }
+}
+
+// ── Clipboard ─────────────────────────────────────────────
+function copyStamp(id) {
+  const el = stampsLayer.querySelector(`[data-id="${id}"]`); if (!el) return;
+  const isLike   = !!el.querySelector('.like-stamp');
+  const letterEl = el.querySelector('.like-stamp') || el.querySelector('.love-letter');
+  const person   = letterEl?.textContent?.trim();
+  if (person && PERSONS[person]) { clipboardStamp = { person, type: isLike ? 'like' : 'love' }; toast(`Copied — Ctrl+V to paste`); }
 }
 
 function pasteStamp() {
   if (!clipboardStamp) return;
-  const prev = currentPerson;
-  const prevTool = currentTool;
-  currentPerson = clipboardStamp.person;
-  currentTool   = clipboardStamp.type;
-  // Paste near centre of current viewport
-  const wrap = document.getElementById('workspace-wrap');
-  const wRect = workspace.getBoundingClientRect();
-  const vCx = wrap.scrollLeft + wrap.clientWidth  / 2;
-  const vCy = wrap.scrollTop  + wrap.clientHeight / 2;
-  // Add small random jitter so repeated pastes don't stack exactly
-  const jx = (Math.random() - 0.5) * 40;
-  const jy = (Math.random() - 0.5) * 40;
-  const px = Math.max(0, Math.min(100, (vCx + jx) / workspace.offsetWidth  * 100));
-  const py = Math.max(0, Math.min(100, (vCy + jy) / workspace.offsetHeight * 100));
-  const data = { person: currentPerson, type: currentTool, px, py };
+  const px = Math.max(0, Math.min(100, (workspaceWrap.scrollLeft + workspaceWrap.clientWidth  / 2 + (Math.random()-.5)*40) / workspace.offsetWidth  * 100));
+  const py = Math.max(0, Math.min(100, (workspaceWrap.scrollTop  + workspaceWrap.clientHeight / 2 + (Math.random()-.5)*40) / workspace.offsetHeight * 100));
+  const data = { ...clipboardStamp, px, py };
   if (stampsRef) {
     syncDot.className = 'syncing';
     const ref = stampsRef.push(data);
     localHistory.push({ type: 'stamp', id: ref.key });
     ref.then(() => { syncDot.className = ''; });
   } else {
-    const stamp = { ...data, id: 'local_' + Date.now() };
-    renderStampEl(stamp);
-    localHistory.push({ type: 'stamp', id: stamp.id });
+    const stamp = { ...data, id: 'local_' + Date.now() }; renderStampEl(stamp); localHistory.push({ type: 'stamp', id: stamp.id });
   }
-  currentPerson = prev;
-  currentTool   = prevTool;
 }
 
-// ── Keyboard shortcuts ─────────────────────────────────────
+// ── Keyboard shortcuts ────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedStampId && document.activeElement === document.body) {
-      e.preventDefault();
-      contextStampId = selectedStampId;
-      selectedStampId = null;
-      deleteContextStamp();
-    }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && document.activeElement === document.body) {
+    if (selectedStampId) { e.preventDefault(); contextStampId = selectedStampId; selectedStampId = null; deleteContextStamp(); }
     return;
   }
-  const ctrl = e.ctrlKey || e.metaKey;
-  if (!ctrl) return;
+  const ctrl = e.ctrlKey || e.metaKey; if (!ctrl) return;
   switch (e.key.toLowerCase()) {
-    case 'z':
-      e.preventDefault();
-      if (e.shiftKey) redo(); else undo();
-      break;
-    case 'y':
-      e.preventDefault();
-      redo();
-      break;
-    case 'c':
-      if (contextStampId) { e.preventDefault(); copyStamp(contextStampId); }
-      break;
-    case 'v':
-      if (clipboardStamp) { e.preventDefault(); pasteStamp(); }
-      break;
+    case 'z': e.preventDefault(); e.shiftKey ? redo() : undo(); break;
+    case 'y': e.preventDefault(); redo(); break;
+    case 'c': if (contextStampId) { e.preventDefault(); copyStamp(contextStampId); } break;
+    case 'v': if (clipboardStamp) { e.preventDefault(); pasteStamp(); } break;
   }
 });
-
-// ── Redo ───────────────────────────────────────────────────
-let redoStack = [];
-
-function undo() {
-  const last = localHistory.pop();
-  if (!last) return;
-  redoStack.push(last);
-  if (last.type === 'stroke') {
-    strokes.splice(last.idx, 1);
-    redrawCanvas();
-  } else if (last.type === 'stamp') {
-    if (stampsRef && !last.id.startsWith('local_')) {
-      syncDot.className = 'syncing';
-      stampsRef.child(last.id).remove().then(() => { syncDot.className = ''; });
-    } else {
-      stampsLayer.querySelector(`[data-id="${last.id}"]`)?.remove();
-    }
-  }
-}
-
-function redo() {
-  const last = redoStack.pop();
-  if (!last) return;
-  localHistory.push(last);
-  if (last.type === 'stroke') {
-    strokes.splice(last.idx, 0, last.stroke);
-    redrawCanvas();
-  } else if (last.type === 'stamp') {
-    if (stampsRef && !last.id.startsWith('local_')) {
-      // Re-push with same key isn't straightforward; just re-place
-      toast('Redo stamp: place it again manually');
-    }
-  }
-}
-
-// Also expose copyStamp via context menu
-document.getElementById('ctx-menu').insertAdjacentHTML('beforeend',
-  '<button onclick="copyStamp(contextStampId); ctxMenu.style.display=\'none\'">⎘ Copy stamp (Ctrl+C)</button>'
-);
 
 // ── Toast ─────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, duration = 2500) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
+
+// Add pen size slider dynamically (hidden, used by pen tool)
+const penSizeInput = document.createElement('input');
+penSizeInput.type = 'range'; penSizeInput.id = 'pen-size'; penSizeInput.min = 1; penSizeInput.max = 10; penSizeInput.value = 3; penSizeInput.step = 1;
+penSizeInput.style.cssText = 'display:none'; document.body.appendChild(penSizeInput);
 </script>
 </body>
 </html>
