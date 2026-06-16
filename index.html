@@ -122,8 +122,6 @@
       position: absolute; transform: translate(-50%, -50%);
       pointer-events: all; user-select: none; -webkit-user-select: none;
       touch-action: none; line-height: 1; cursor: grab;
-      /* Larger invisible touch target */
-      padding: 10px; margin: -10px;
     }
     .stamp-el:active { cursor: grabbing; }
     .stamp-el.selected { outline: 2.5px dashed rgba(92,92,224,0.9); outline-offset: 5px; border-radius: 50%; }
@@ -480,10 +478,15 @@ workspace.addEventListener('mousemove',e=>{
   if(Math.hypot(e.clientX-pressX,e.clientY-pressY)>8)cancelLoveTimer();
   if(isLoveMode){loveHint.style.left=e.clientX+'px';loveHint.style.top=e.clientY+'px';}
 });
-workspace.addEventListener('mouseup',  ()=>{ /* click fires next and places stamp */ });
+workspace.addEventListener('mouseup', e=>{
+  const wasLove=isLoveMode;
+  cancelLoveTimer(); endLoveMode();
+  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
+  if(Math.hypot(e.clientX-pressX,e.clientY-pressY)<8){deselectStamp();placeStamp(e.clientX,e.clientY,wasLove?'love':'like');}
+});
 workspace.addEventListener('mouseleave',()=>{cancelLoveTimer();endLoveMode();});
 
-// Mobile touch — only tracks love-mode timer and pinch detection
+// Mobile touch
 workspace.addEventListener('touchstart',e=>{
   if(e.touches.length>1){wasPinch=true;cancelLoveTimer();endLoveMode();return;}
   if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
@@ -499,28 +502,24 @@ workspace.addEventListener('touchstart',e=>{
 
 workspace.addEventListener('touchmove',e=>{
   if(e.touches.length>1){wasPinch=true;cancelLoveTimer();endLoveMode();return;}
-  // Scrolling — cancel love mode
   if(Math.hypot(e.touches[0].clientX-pressX,e.touches[0].clientY-pressY)>10){cancelLoveTimer();endLoveMode();}
   if(isLoveMode){loveHint.style.left=e.touches[0].clientX+'px';loveHint.style.top=e.touches[0].clientY+'px';}
 },{passive:true});
 
 workspace.addEventListener('touchend',e=>{
-  // Don't endLoveMode here — the click event fires next and reads isLoveMode
-  if(e.touches.length===0&&wasPinch){wasPinch=false;cancelLoveTimer();endLoveMode();}
+  const wasLove=isLoveMode; // capture BEFORE cancel — timer may have already fired
+  cancelLoveTimer(); endLoveMode(); // always reset, no exceptions
+  if(e.touches.length>0)return; // another finger still on screen
+  if(wasPinch){wasPinch=false;return;}
+  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
+  const t=e.changedTouches[0];
+  if(Math.hypot(t.clientX-pressX,t.clientY-pressY)<12){
+    deselectStamp();
+    placeStamp(t.clientX,t.clientY,wasLove?'love':'like');
+  }
 },{passive:true});
 
 workspace.addEventListener('touchcancel',()=>{cancelLoveTimer();endLoveMode();wasPinch=false;},{passive:true});
-
-// Click handles stamp placement on both desktop (fallback) and mobile
-// Browser fires click after tap but NOT after scroll/pinch — exactly what we need
-workspace.addEventListener('click',e=>{
-  if(e.target.closest('.stamp-el')||e.target.closest('.draw-canvas')||currentTool!=='stamp')return;
-  if(wasPinch){wasPinch=false;endLoveMode();return;}
-  cancelLoveTimer();
-  deselectStamp();
-  placeStamp(e.clientX,e.clientY,isLoveMode?'love':'like');
-  endLoveMode();
-});
 
 // Pen
 document.querySelectorAll('.draw-canvas').forEach(canvas=>{
