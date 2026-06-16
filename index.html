@@ -500,6 +500,7 @@ function selectStamp(el) {
   if (selected) selected.classList.remove('sel');
   selected = el;
   el.classList.add('sel');
+  toast(`ID: ${el.dataset.id}`);
   showTrash();
 }
 
