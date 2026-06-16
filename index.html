@@ -143,7 +143,7 @@
       display: flex; flex-direction: column; align-items: center; gap: 0;
       filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
     }
-    .love-e { font-size: 34px; line-height: 1; filter: drop-shadow(0 0 0 white) drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white) drop-shadow(1px 1px 0 white) drop-shadow(-1px 1px 0 white) drop-shadow(1px -1px 0 white) drop-shadow(-1px -1px 0 white); }
+    .love-e { font-size: 28px; line-height: 1; filter: drop-shadow(0 0 0 white) drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white) drop-shadow(1px 1px 0 white) drop-shadow(-1px 1px 0 white) drop-shadow(1px -1px 0 white) drop-shadow(-1px -1px 0 white); }
     .love-l { font-size: 9px; font-weight: 800; margin-top: -2px; }
 
     /* ── Floating love preview ── */
@@ -407,10 +407,13 @@ function setTool(t) {
 
 function setDay(d) {
   day = d;
+  localStorage.setItem('golatico-day', d);
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.day === d));
   document.querySelectorAll('.dbtn').forEach(b => b.classList.toggle('on', b.dataset.day === d));
   wrap.scrollTop = 0;
 }
+const _savedDay = localStorage.getItem('golatico-day');
+if (_savedDay && ['thu','fri','sat'].includes(_savedDay)) setDay(_savedDay);
 
 // ── Stamp placement ───────────────────────────────────────────────────────────
 function panelAt(cx, cy) {
@@ -449,6 +452,12 @@ function placeStamp(cx, cy, type) {
 }
 
 // ── Stamp rendering ───────────────────────────────────────────────────────────
+function stampRot(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  return ((h % 25) - 12);
+}
+
 function renderStamp(stamp) {
   const panel = $('panel-' + (stamp.day || 'thu'));
   if (!panel) return;
@@ -464,7 +473,8 @@ function renderStamp(stamp) {
   if (stamp.type === 'like') {
     el.innerHTML = `<div class="like" style="background:${p.color};color:${p.text}">${stamp.person}</div>`;
   } else {
-    el.innerHTML = `<div class="love">
+    const rot = stampRot(stamp.id);
+    el.innerHTML = `<div class="love" style="transform:rotate(${rot}deg)">
       <span class="love-e">${p.emoji}</span>
       <span class="love-l" style="color:${p.text};text-shadow:0 0 4px rgba(0,0,0,.5)">${stamp.person}</span>
     </div>`;
