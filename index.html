@@ -134,16 +134,34 @@
     .love-stamp { position: relative; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.25)); }
     .love-stamp-emoji { font-size: 42px; line-height: 1; display: none; }
 
-    #mobile-delete {
-      display: none; position: fixed;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); right: 20px; z-index: 400;
+    #trash-zone {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+      left: 50%; transform: translateX(-50%) translateY(120px);
+      z-index: 400; pointer-events: none;
+      transition: transform .28s cubic-bezier(.34,1.56,.64,1), opacity .22s;
+      opacity: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
     }
-    #mobile-delete button {
-      width: 50px; height: 50px; border-radius: 25px;
-      background: #ff453a; color: white; border: none; font-size: 20px;
-      cursor: pointer; box-shadow: 0 4px 16px rgba(255,69,58,0.4);
+    #trash-zone.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1; pointer-events: all;
+    }
+    #trash-zone .trash-target {
+      width: 64px; height: 64px; border-radius: 32px;
+      background: rgba(255,69,58,0.12); border: 2px dashed rgba(255,69,58,0.5);
       display: flex; align-items: center; justify-content: center;
+      font-size: 26px; transition: background .15s, border-color .15s, transform .15s;
     }
+    #trash-zone.over .trash-target {
+      background: rgba(255,69,58,0.9); border-color: #ff453a;
+      transform: scale(1.18);
+    }
+    #trash-zone .trash-label {
+      font-size: 11px; font-weight: 600; color: rgba(255,69,58,0.7);
+      letter-spacing: .02em;
+    }
+    #trash-zone.over .trash-label { color: #ff453a; }
 
     #ctx-menu {
       position: fixed; background: white;
@@ -228,7 +246,10 @@
   </div>
 </div>
 
-<div id="mobile-delete"><button onclick="deleteSelected()">🗑</button></div>
+<div id="trash-zone">
+  <div class="trash-target">🗑</div>
+  <span class="trash-label">Drop to delete</span>
+</div>
 <div id="ctx-menu">
   <button class="normal" onclick="copyStamp(contextStampId); ctxMenu.style.display='none'">⎘ Copy stamp</button>
   <button class="danger" onclick="deleteContextStamp()">🗑 Remove stamp</button>
@@ -386,7 +407,7 @@ function renderStampEl(stamp){
     const fb=document.createElement('span'); fb.className='love-stamp-emoji'; fb.textContent=p.emoji;
     w.appendChild(img); w.appendChild(fb); el.appendChild(w);
   }
-  el.addEventListener('click',     e=>{e.stopPropagation();selectStamp(stamp.id);});
+  el.addEventListener('click',e=>{e.stopPropagation();if(!dragMoved)selectStamp(stamp.id);});
   el.addEventListener('mousedown', startDragStamp);
   el.addEventListener('touchstart',startDragStamp,{passive:false});
   el.addEventListener('contextmenu',showCtxMenuFromEvent);
@@ -396,30 +417,52 @@ function renderStampEl(stamp){
   panel.querySelector('.stamps-layer').appendChild(el);
 }
 
+const trashZone=document.getElementById('trash-zone');
+
+function showTrash(){trashZone.classList.add('visible');}
+function hideTrash(){trashZone.classList.remove('visible','over');}
+function isOverTrash(cx,cy){
+  const r=trashZone.getBoundingClientRect();
+  return cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom;
+}
+
 function selectStamp(id){
+  const el=document.querySelector(`[data-id="${id}"]`); if(!el)return;
+  const owner=el.querySelector('.like-stamp')?.textContent?.trim()||el.querySelector('img')?.alt;
+  if(owner&&owner!==currentPerson){toast(`That's ${owner}'s stamp`);return;}
   document.querySelectorAll('.stamp-el.selected').forEach(e=>e.classList.remove('selected'));
   selectedStampId=id; contextStampId=id;
-  document.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
-  document.getElementById('mobile-delete').style.display='block';
+  el.classList.add('selected');
+  showTrash();
 }
 function deselectStamp(){
   document.querySelectorAll('.stamp-el.selected').forEach(e=>e.classList.remove('selected'));
-  selectedStampId=null; document.getElementById('mobile-delete').style.display='none';
+  selectedStampId=null; hideTrash();
 }
 function deleteSelected(){
   if(!selectedStampId)return;
   contextStampId=selectedStampId; selectedStampId=null;
-  document.getElementById('mobile-delete').style.display='none'; deleteContextStamp();
+  hideTrash(); deleteContextStamp();
 }
+trashZone.addEventListener('click',deleteSelected);
+trashZone.addEventListener('touchend',e=>{e.preventDefault();deleteSelected();});
 
+function stampOwner(el){
+  return el.querySelector('.like-stamp')?.textContent?.trim()||el.querySelector('img')?.alt||'';
+}
 function startDragStamp(e){
   e.stopPropagation();
-  // Do NOT preventDefault on touchstart — it kills the click event and breaks stamp selection on iOS
-  cancelLoveTimer(); dragMoved=false; draggingStamp=e.currentTarget;
+  const owner=stampOwner(e.currentTarget);
+  if(owner&&owner!==currentPerson){
+    // Not your stamp — just select it so owner check shows toast, don't drag
+    return;
+  }
+  clearLovePreview(); dragMoved=false; draggingStamp=e.currentTarget;
   const panel=draggingStamp.closest('.day-panel'),rect=panel.getBoundingClientRect();
   const cx=e.touches?e.touches[0].clientX:e.clientX, cy=e.touches?e.touches[0].clientY:e.clientY;
   dragOffX=cx-(parseFloat(draggingStamp.style.left)/100*rect.width+rect.left);
   dragOffY=cy-(parseFloat(draggingStamp.style.top)/100*rect.height+rect.top);
+  showTrash();
   document.addEventListener('mousemove',moveDragStamp); document.addEventListener('mouseup',stopDragStamp);
   document.addEventListener('touchmove',moveDragStamp,{passive:false}); document.addEventListener('touchend',stopDragStamp);
 }
@@ -429,13 +472,21 @@ function moveDragStamp(e){
   const cx=e.touches?e.touches[0].clientX:e.clientX, cy=e.touches?e.touches[0].clientY:e.clientY;
   draggingStamp.style.left=Math.max(0,Math.min(100,(cx-dragOffX-rect.left)/rect.width*100))+'%';
   draggingStamp.style.top=Math.max(0,Math.min(100,(cy-dragOffY-rect.top)/rect.height*100))+'%';
+  trashZone.classList.toggle('over',isOverTrash(cx,cy));
 }
-function stopDragStamp(){
-  if(draggingStamp&&dragMoved&&stampsRef){
+function stopDragStamp(e){
+  if(!draggingStamp){document.removeEventListener('mousemove',moveDragStamp);document.removeEventListener('mouseup',stopDragStamp);document.removeEventListener('touchmove',moveDragStamp);document.removeEventListener('touchend',stopDragStamp);return;}
+  const cx=e?.touches?.[0]?.clientX??e?.clientX??-999;
+  const cy=e?.touches?.[0]?.clientY??e?.clientY??-999;
+  if(dragMoved&&isOverTrash(cx,cy)){
+    // Dropped on trash — delete
+    contextStampId=draggingStamp.dataset.id; deleteContextStamp();
+    selectedStampId=null;
+  } else if(dragMoved&&stampsRef){
     syncDot.className='syncing';
     stampsRef.child(draggingStamp.dataset.id).update({px:parseFloat(draggingStamp.style.left),py:parseFloat(draggingStamp.style.top)}).then(()=>syncDot.className='');
   }
-  draggingStamp=null; dragMoved=false;
+  draggingStamp=null; dragMoved=false; hideTrash();
   document.removeEventListener('mousemove',moveDragStamp); document.removeEventListener('mouseup',stopDragStamp);
   document.removeEventListener('touchmove',moveDragStamp); document.removeEventListener('touchend',stopDragStamp);
 }
