@@ -176,6 +176,36 @@
     #trash-label { font-size: 11px; font-weight: 600; color: rgba(255,69,58,0.65); }
     #trash.hot #trash-label { color: #ff453a; }
 
+    /* ── Lock screen ── */
+    #lockscreen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: #111; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 20px;
+    }
+    #lockscreen h1 { font-size: 28px; font-weight: 900; color: white; letter-spacing: -0.5px; }
+    #lockscreen p  { font-size: 13px; color: rgba(255,255,255,0.45); margin-top: -12px; }
+    #lock-input {
+      width: 220px; padding: 14px 18px; border-radius: 14px; border: none;
+      font-size: 18px; font-weight: 700; text-align: center; letter-spacing: 3px;
+      background: rgba(255,255,255,0.1); color: white; outline: none;
+      -webkit-text-security: disc;
+    }
+    #lock-input::placeholder { color: rgba(255,255,255,0.25); letter-spacing: 1px; font-weight: 400; }
+    #lock-input.shake { animation: lockshake .35s ease; }
+    @keyframes lockshake {
+      0%,100%{ transform:translateX(0) }
+      20%    { transform:translateX(-8px) }
+      40%    { transform:translateX(8px) }
+      60%    { transform:translateX(-6px) }
+      80%    { transform:translateX(6px) }
+    }
+    #lock-btn {
+      width: 220px; padding: 14px; border-radius: 14px; border: none;
+      background: #874FFF; color: white; font-size: 16px; font-weight: 700;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    #lockscreen.hidden { display: none; }
+
     /* ── Toast ── */
     #toast {
       position: fixed; bottom: calc(env(safe-area-inset-bottom,0px) + 14px);
@@ -212,6 +242,13 @@
   </style>
 </head>
 <body>
+
+<div id="lockscreen">
+  <h1>golatico 🎪</h1>
+  <p>Enter the secret code to continue</p>
+  <input id="lock-input" type="password" placeholder="password" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="lock-btn" onclick="tryUnlock()">Enter</button>
+</div>
 
 <div id="toolbar">
   <button class="pbtn on" id="pb-N" style="background:#874FFF;color:white"   onclick="setPerson('N')">N</button>
@@ -278,6 +315,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 'use strict';
 
@@ -317,28 +355,65 @@ const syncEl   = $('sync');
 const ctxMenu  = $('ctxmenu');
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
+const APP_PASSWORD = '2solstice6';
+
+function tryUnlock() {
+  const val = $('lock-input').value.trim();
+  if (val !== APP_PASSWORD) {
+    const inp = $('lock-input');
+    inp.classList.remove('shake');
+    void inp.offsetWidth;
+    inp.classList.add('shake');
+    inp.value = '';
+    return;
+  }
+  firebase.auth().signInAnonymously().catch(() => {
+    // if auth fails, still let them in (graceful degradation)
+    $('lockscreen').classList.add('hidden');
+  });
+}
+
+$('lock-input').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
 try {
   firebase.initializeApp(FB_CONFIG);
-  const db = firebase.database();
-  stampsRef = db.ref('golatico/stamps');
+  const db   = firebase.database();
+  const auth = firebase.auth();
 
-  stampsRef.on('child_added', snap => {
-    if (!document.querySelector(`[data-id="${snap.key}"]`))
-      renderStamp({ ...snap.val(), id: snap.key });
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      $('lockscreen').classList.add('hidden');
+      stampsRef = db.ref('golatico/stamps');
+
+      stampsRef.on('child_added', snap => {
+        if (!document.querySelector(`[data-id="${snap.key}"]`))
+          renderStamp({ ...snap.val(), id: snap.key });
+      });
+      stampsRef.on('child_changed', snap => {
+        const el = document.querySelector(`[data-id="${snap.key}"]`);
+        if (el) { el.style.left = snap.val().px + '%'; el.style.top = snap.val().py + '%'; }
+      });
+      stampsRef.on('child_removed', snap => {
+        document.querySelector(`[data-id="${snap.key}"]`)?.remove();
+      });
+      db.ref('.info/connected').on('value', s => {
+        syncEl.className = s.val() ? '' : 'off';
+      });
+    }
   });
-  stampsRef.on('child_changed', snap => {
-    const el = document.querySelector(`[data-id="${snap.key}"]`);
-    if (el) { el.style.left = snap.val().px + '%'; el.style.top = snap.val().py + '%'; }
-  });
-  stampsRef.on('child_removed', snap => {
-    document.querySelector(`[data-id="${snap.key}"]`)?.remove();
-  });
-  db.ref('.info/connected').on('value', s => {
-    syncEl.className = s.val() ? '' : 'off';
-  });
+
+  // restore session if already authenticated
+  if (localStorage.getItem('golatico-authed') === '1') {
+    auth.signInAnonymously();
+  }
 } catch (e) {
   syncEl.className = 'err';
 }
+
+// persist auth across reloads
+firebase.auth?.().onAuthStateChanged?.(u => {
+  if (u) localStorage.setItem('golatico-authed', '1');
+});
 
 function fbBusy(promise) {
   syncEl.className = 'busy';
